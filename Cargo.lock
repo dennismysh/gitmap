@@ -1503,6 +1503,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "tempfile",
  "tray-icon",
  "walkdir",
 ]

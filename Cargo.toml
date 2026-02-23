@@ -23,3 +23,6 @@ chrono = { version = "0.4", features = ["serde"] }
 rfd = "0.15"
 walkdir = "2"
 dirs = "6"
+
+[dev-dependencies]
+tempfile = "3"
