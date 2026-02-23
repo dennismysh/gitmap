@@ -61,9 +61,10 @@ impl GitMapApp {
             Some(id) => id.clone(),
             None => return,
         };
-        let since = self.store.most_recent_date();
+        // Full rescan: start fresh to avoid double-counting
+        self.store = CommitStore::new();
         for repo in &self.config.tracked_repos {
-            if let Ok(stats) = scanner::scan_repo(repo, &identity, since) {
+            if let Ok(stats) = scanner::scan_repo(repo, &identity, None) {
                 self.store.merge(stats);
             }
         }
