@@ -243,6 +243,11 @@ impl GitMapApp {
 }
 
 impl eframe::App for GitMapApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // Match our dark background: rgb(13, 17, 23)
+        [13.0 / 255.0, 17.0 / 255.0, 23.0 / 255.0, 1.0]
+    }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         let _ = self.config.save();
         let history_path = crate::config::data_dir().join("history.json");
