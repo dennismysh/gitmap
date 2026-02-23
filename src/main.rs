@@ -83,7 +83,9 @@ fn main() -> eframe::Result<()> {
                 .unwrap();
             tray_holder_clone.borrow_mut().replace(tray);
 
-            Ok(Box::new(GitMapApp::new(tray_rx, config, store)))
+            let mut app = GitMapApp::new(tray_rx, config, store);
+            app.initial_scan();
+            Ok(Box::new(app))
         }),
     )
 }

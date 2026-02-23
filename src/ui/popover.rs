@@ -3,8 +3,10 @@ use std::sync::mpsc;
 
 use crate::config::{Config, DataMode, TimeRange};
 use crate::heatmap::{color_for_level, grid_dates, level_for_value};
+use crate::scanner::{self, GitIdentity};
 use crate::store::CommitStore;
 use crate::ui::settings::{self, SettingsState};
+use crate::watcher::RepoWatcher;
 
 #[derive(Debug)]
 pub enum TrayMessage {
@@ -20,10 +22,24 @@ pub struct GitMapApp {
     hovered_info: Option<String>,
     pub show_settings: bool,
     settings_state: SettingsState,
+    identity: Option<GitIdentity>,
+    watcher: Option<RepoWatcher>,
 }
 
 impl GitMapApp {
     pub fn new(tray_rx: mpsc::Receiver<TrayMessage>, config: Config, store: CommitStore) -> Self {
+        let identity = config
+            .tracked_repos
+            .first()
+            .and_then(|p| scanner::detect_identity(p).ok());
+
+        let mut watcher = RepoWatcher::new().ok();
+        if let Some(ref mut w) = watcher {
+            for repo in &config.tracked_repos {
+                let _ = w.watch_repo(repo);
+            }
+        }
+
         let settings_state = SettingsState::new(&config);
         Self {
             tray_rx,
@@ -33,7 +49,24 @@ impl GitMapApp {
             hovered_info: None,
             show_settings: false,
             settings_state,
+            identity,
+            watcher,
         }
+    }
+
+    pub fn initial_scan(&mut self) {
+        let identity = match &self.identity {
+            Some(id) => id.clone(),
+            None => return,
+        };
+        let since = self.store.most_recent_date();
+        for repo in &self.config.tracked_repos {
+            if let Ok(stats) = scanner::scan_repo(repo, &identity, since) {
+                self.store.merge(stats);
+            }
+        }
+        let history_path = crate::config::data_dir().join("history.json");
+        let _ = self.store.save_to(&history_path);
     }
 
     fn draw_header(&mut self, ui: &mut egui::Ui) {
@@ -211,6 +244,27 @@ impl GitMapApp {
 
 impl eframe::App for GitMapApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll file watcher for changed repos
+        let changed_repos = self
+            .watcher
+            .as_ref()
+            .map(|w| w.poll_changed_repos())
+            .unwrap_or_default();
+
+        if !changed_repos.is_empty() {
+            if let Some(ref identity) = self.identity {
+                let identity = identity.clone();
+                let since = self.store.most_recent_date();
+                for repo_path in &changed_repos {
+                    if let Ok(stats) = scanner::scan_repo(repo_path, &identity, since) {
+                        self.store.merge(stats);
+                    }
+                }
+                let history_path = crate::config::data_dir().join("history.json");
+                let _ = self.store.save_to(&history_path);
+            }
+        }
+
         while let Ok(msg) = self.tray_rx.try_recv() {
             match msg {
                 TrayMessage::ToggleWindow { icon_rect } => {
@@ -256,6 +310,23 @@ impl eframe::App for GitMapApp {
                 if ui.button("\u{2190} Back").clicked() {
                     self.show_settings = false;
                     let _ = self.config.save();
+
+                    // Re-detect identity
+                    self.identity = self
+                        .config
+                        .tracked_repos
+                        .first()
+                        .and_then(|p| scanner::detect_identity(p).ok());
+
+                    // Update watchers for any new repos
+                    if let Some(ref mut w) = self.watcher {
+                        for repo in &self.config.tracked_repos {
+                            let _ = w.watch_repo(repo);
+                        }
+                    }
+
+                    // Rescan
+                    self.initial_scan();
                 }
                 ui.add_space(8.0);
                 settings::draw_settings(ui, &mut self.config, &mut self.settings_state);
