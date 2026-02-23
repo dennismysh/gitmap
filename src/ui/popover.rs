@@ -366,12 +366,14 @@ impl eframe::App for GitMapApp {
                     self.visible = !self.visible;
                     if self.visible {
                         // Position under the tray icon
+                        // tray-icon gives physical pixels, egui expects logical points
                         if let Some(ref rect) = self.last_icon_rect {
+                            let scale = ctx.pixels_per_point() as f64;
                             let icon_center_x =
-                                rect.position.x + (rect.size.width as f64 / 2.0);
+                                (rect.position.x + rect.size.width as f64 / 2.0) / scale;
                             let popover_width = 420.0_f64;
                             let x = icon_center_x - (popover_width / 2.0);
-                            let y = rect.position.y + rect.size.height as f64;
+                            let y = (rect.position.y + rect.size.height as f64) / scale;
 
                             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                                 egui::pos2(x as f32, y as f32),
