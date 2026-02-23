@@ -24,6 +24,7 @@ pub struct GitMapApp {
     settings_state: SettingsState,
     identity: Option<GitIdentity>,
     watcher: Option<RepoWatcher>,
+    last_icon_rect: Option<tray_icon::Rect>,
 }
 
 impl GitMapApp {
@@ -43,7 +44,7 @@ impl GitMapApp {
         let settings_state = SettingsState::new(&config);
         Self {
             tray_rx,
-            visible: false,
+            visible: true, // Start visible for debugging
             config,
             store,
             hovered_info: None,
@@ -51,6 +52,7 @@ impl GitMapApp {
             settings_state,
             identity,
             watcher,
+            last_icon_rect: None,
         }
     }
 
@@ -216,6 +218,87 @@ impl GitMapApp {
         }
     }
 
+    fn draw_stats(&self, ui: &mut egui::Ui) {
+        use chrono::Datelike;
+
+        let year = self.config.selected_year;
+        let stats = self.store.stats();
+
+        let mut total_commits: u32 = 0;
+        let mut total_insertions: u32 = 0;
+        let mut total_deletions: u32 = 0;
+        let mut active_days: u32 = 0;
+        let mut current_streak: u32 = 0;
+        let mut longest_streak: u32 = 0;
+
+        // Collect stats for the selected year
+        for (date, day) in stats {
+            if date.year() == year {
+                total_commits += day.commits;
+                total_insertions += day.insertions;
+                total_deletions += day.deletions;
+                if day.commits > 0 {
+                    active_days += 1;
+                }
+            }
+        }
+
+        // Calculate current streak (consecutive days ending today or yesterday)
+        let today = chrono::Local::now().naive_local().date();
+        let mut check_date = today;
+        loop {
+            if let Some(day) = stats.get(&check_date) {
+                if day.commits > 0 {
+                    current_streak += 1;
+                    check_date -= chrono::Duration::days(1);
+                    continue;
+                }
+            }
+            // Allow streak to start from yesterday if today has no commits yet
+            if check_date == today && current_streak == 0 {
+                check_date -= chrono::Duration::days(1);
+                continue;
+            }
+            break;
+        }
+
+        // Calculate longest streak in the year
+        let jan1 = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
+        let dec31 = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+        let mut streak: u32 = 0;
+        let mut d = jan1;
+        while d <= dec31 {
+            if stats.get(&d).map(|s| s.commits > 0).unwrap_or(false) {
+                streak += 1;
+                longest_streak = longest_streak.max(streak);
+            } else {
+                streak = 0;
+            }
+            d += chrono::Duration::days(1);
+        }
+
+        let dim = egui::Color32::from_rgb(139, 148, 158);
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{}", total_commits)).strong().size(13.0));
+            ui.label(egui::RichText::new("commits").size(11.0).color(dim));
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new(format!("+{}", total_insertions)).size(11.0).color(egui::Color32::from_rgb(63, 185, 80)));
+            ui.label(egui::RichText::new(format!("-{}", total_deletions)).size(11.0).color(egui::Color32::from_rgb(248, 81, 73)));
+        });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{}", active_days)).strong().size(13.0));
+            ui.label(egui::RichText::new("active days").size(11.0).color(dim));
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new(format!("{}", current_streak)).strong().size(13.0));
+            ui.label(egui::RichText::new("day streak").size(11.0).color(dim));
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new(format!("{}", longest_streak)).strong().size(13.0));
+            ui.label(egui::RichText::new("longest").size(11.0).color(dim));
+        });
+    }
+
     fn draw_legend(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(
@@ -279,18 +362,22 @@ impl eframe::App for GitMapApp {
         while let Ok(msg) = self.tray_rx.try_recv() {
             match msg {
                 TrayMessage::ToggleWindow { icon_rect } => {
+                    self.last_icon_rect = Some(icon_rect);
                     self.visible = !self.visible;
                     if self.visible {
-                        let icon_center_x =
-                            icon_rect.position.x + (icon_rect.size.width as f64 / 2.0);
-                        let popover_width = 420.0_f64;
-                        let x = icon_center_x - (popover_width / 2.0);
-                        let y = icon_rect.position.y + icon_rect.size.height as f64;
+                        // Always reposition under the tray icon
+                        if let Some(ref rect) = self.last_icon_rect {
+                            let icon_center_x =
+                                rect.position.x + (rect.size.width as f64 / 2.0);
+                            let popover_width = 420.0_f64;
+                            let x = icon_center_x - (popover_width / 2.0);
+                            let y = rect.position.y + rect.size.height as f64;
 
+                            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                egui::pos2(x as f32, y as f32),
+                            ));
+                        }
                         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                            egui::pos2(x as f32, y as f32),
-                        ));
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     } else {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
@@ -304,14 +391,15 @@ impl eframe::App for GitMapApp {
 
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
 
-        // Auto-hide when the window loses focus
-        if self.visible {
-            let has_focus = ctx.input(|i| i.focused);
-            if !has_focus {
-                self.visible = false;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-            }
-        }
+        // Auto-hide when the window loses focus (disabled temporarily for debugging)
+        // TODO: re-enable with a frame delay guard
+        // if self.visible {
+        //     let has_focus = ctx.input(|i| i.focused);
+        //     if !has_focus {
+        //         self.visible = false;
+        //         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        //     }
+        // }
 
         if !self.visible {
             return;
@@ -375,9 +463,19 @@ impl eframe::App for GitMapApp {
                 ui.add_space(4.0);
                 ui.separator();
                 ui.add_space(4.0);
-                if ui.button("\u{2699} Settings").clicked() {
-                    self.show_settings = true;
-                }
+
+                ui.horizontal(|ui| {
+                    if ui.button("\u{2699} Settings").clicked() {
+                        self.show_settings = true;
+                    }
+                    ui.label(
+                        egui::RichText::new(format!("{} repos", self.config.tracked_repos.len()))
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(100, 110, 120)),
+                    );
+                });
+
+                self.draw_stats(ui);
             }
         });
     }
