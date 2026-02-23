@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use crate::config::{Config, DataMode, TimeRange};
 use crate::heatmap::{color_for_level, grid_dates, level_for_value};
 use crate::store::CommitStore;
+use crate::ui::settings::{self, SettingsState};
 
 #[derive(Debug)]
 pub enum TrayMessage {
@@ -18,10 +19,12 @@ pub struct GitMapApp {
     pub store: CommitStore,
     hovered_info: Option<String>,
     pub show_settings: bool,
+    settings_state: SettingsState,
 }
 
 impl GitMapApp {
     pub fn new(tray_rx: mpsc::Receiver<TrayMessage>, config: Config, store: CommitStore) -> Self {
+        let settings_state = SettingsState::new(&config);
         Self {
             tray_rx,
             visible: false,
@@ -29,6 +32,7 @@ impl GitMapApp {
             store,
             hovered_info: None,
             show_settings: false,
+            settings_state,
         }
     }
 
@@ -254,7 +258,7 @@ impl eframe::App for GitMapApp {
                     let _ = self.config.save();
                 }
                 ui.add_space(8.0);
-                ui.label("Settings view (coming next)");
+                settings::draw_settings(ui, &mut self.config, &mut self.settings_state);
             } else {
                 self.draw_header(ui);
                 ui.add_space(12.0);
