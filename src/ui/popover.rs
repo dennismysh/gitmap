@@ -378,20 +378,6 @@ impl eframe::App for GitMapApp {
                             ));
                         }
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-
-                        // Force window to front on macOS (Accessory apps need this)
-                        #[cfg(target_os = "macos")]
-                        {
-                            use objc2::MainThreadMarker;
-                            use objc2_app_kit::NSApplication;
-                            let mtm = unsafe { MainThreadMarker::new_unchecked() };
-                            let ns_app = NSApplication::sharedApplication(mtm);
-                            ns_app.activate();
-                            // Also order each window to front
-                            for window in ns_app.windows().iter() {
-                                window.orderFrontRegardless();
-                            }
-                        }
                     } else {
                         // Hide by moving off-screen
                         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(

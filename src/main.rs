@@ -14,7 +14,6 @@ fn main() -> eframe::Result<()> {
 
     let (tray_tx, tray_rx) = mpsc::channel::<TrayMessage>();
 
-    // Generate a simple 22x22 black icon (template icon for macOS)
     let mut icon_rgba = Vec::with_capacity(22 * 22 * 4);
     for _ in 0..(22 * 22) {
         icon_rgba.extend_from_slice(&[0, 0, 0, 255]);
@@ -27,7 +26,6 @@ fn main() -> eframe::Result<()> {
     menu.append(&quit_item).unwrap();
     let quit_id = quit_item.id().clone();
 
-    // Set up tray event handlers
     let tx_click = tray_tx.clone();
     tray_icon::TrayIconEvent::set_event_handler(Some(
         move |event: tray_icon::TrayIconEvent| {
@@ -73,31 +71,6 @@ fn main() -> eframe::Result<()> {
         "GitMap",
         options,
         Box::new(move |_cc| {
-            // Set macOS to Accessory mode + order window to front
-            #[cfg(target_os = "macos")]
-            {
-                use objc2::MainThreadMarker;
-                use objc2_app_kit::{
-                    NSApplication, NSApplicationActivationPolicy,
-                    NSWindowCollectionBehavior,
-                };
-
-                let mtm = unsafe { MainThreadMarker::new_unchecked() };
-                let ns_app = NSApplication::sharedApplication(mtm);
-                ns_app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-
-                // Make our window behave as a popover-style panel:
-                // - can join all spaces
-                // - can activate regardless of policy
-                if let Some(window) = ns_app.mainWindow() {
-                    window.setCollectionBehavior(
-                        NSWindowCollectionBehavior::CanJoinAllSpaces
-                            | NSWindowCollectionBehavior::FullScreenAuxiliary,
-                    );
-                    window.setLevel(3); // NSPopUpMenuWindowLevel-ish
-                }
-            }
-
             let tray = tray_icon::TrayIconBuilder::new()
                 .with_icon(icon)
                 .with_icon_as_template(true)
