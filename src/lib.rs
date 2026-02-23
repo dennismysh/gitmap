@@ -3,4 +3,5 @@ pub mod discovery;
 pub mod heatmap;
 pub mod scanner;
 pub mod store;
+pub mod ui;
 pub mod watcher;
