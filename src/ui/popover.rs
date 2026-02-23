@@ -377,6 +377,16 @@ impl eframe::App for GitMapApp {
                                 egui::pos2(x as f32, y as f32),
                             ));
                         }
+                        // Activate the app so the window comes to front
+                        // (required for Accessory activation policy)
+                        #[cfg(target_os = "macos")]
+                        {
+                            use objc2::MainThreadMarker;
+                            use objc2_app_kit::NSApplication;
+                            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+                            let app = NSApplication::sharedApplication(mtm);
+                            app.activate();
+                        }
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     } else {
                         // Hide by moving off-screen
