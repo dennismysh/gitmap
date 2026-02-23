@@ -243,6 +243,12 @@ impl GitMapApp {
 }
 
 impl eframe::App for GitMapApp {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _ = self.config.save();
+        let history_path = crate::config::data_dir().join("history.json");
+        let _ = self.store.save_to(&history_path);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Poll file watcher for changed repos
         let changed_repos = self
@@ -292,6 +298,15 @@ impl eframe::App for GitMapApp {
         }
 
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
+
+        // Auto-hide when the window loses focus
+        if self.visible {
+            let has_focus = ctx.input(|i| i.focused);
+            if !has_focus {
+                self.visible = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            }
+        }
 
         if !self.visible {
             return;
