@@ -44,7 +44,7 @@ impl GitMapApp {
         let settings_state = SettingsState::new(&config);
         Self {
             tray_rx,
-            visible: true, // Start visible for debugging
+            visible: false,
             config,
             store,
             hovered_info: None,

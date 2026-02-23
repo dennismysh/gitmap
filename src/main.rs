@@ -7,6 +7,20 @@ use gitmap::store::CommitStore;
 use gitmap::ui::popover::{GitMapApp, TrayMessage};
 
 fn main() -> eframe::Result<()> {
+    // Set macOS activation policy to Accessory:
+    // - No Dock icon
+    // - No menu bar (Window/Help)
+    // - App behaves as a background agent with just the tray icon
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::NSApplication;
+        use objc2_app_kit::NSApplicationActivationPolicy;
+        let mtm = unsafe { MainThreadMarker::new_unchecked() };
+        let app = NSApplication::sharedApplication(mtm);
+        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+    }
+
     let config = Config::load();
 
     let history_path = gitmap::config::data_dir().join("history.json");
