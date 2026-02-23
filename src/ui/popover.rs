@@ -377,17 +377,21 @@ impl eframe::App for GitMapApp {
                                 egui::pos2(x as f32, y as f32),
                             ));
                         }
-                        // Activate the app so the window comes to front
-                        // (required for Accessory activation policy)
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+
+                        // Force window to front on macOS (Accessory apps need this)
                         #[cfg(target_os = "macos")]
                         {
                             use objc2::MainThreadMarker;
                             use objc2_app_kit::NSApplication;
                             let mtm = unsafe { MainThreadMarker::new_unchecked() };
-                            let app = NSApplication::sharedApplication(mtm);
-                            app.activate();
+                            let ns_app = NSApplication::sharedApplication(mtm);
+                            ns_app.activate();
+                            // Also order each window to front
+                            for window in ns_app.windows().iter() {
+                                window.orderFrontRegardless();
+                            }
                         }
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     } else {
                         // Hide by moving off-screen
                         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(

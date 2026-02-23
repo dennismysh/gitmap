@@ -57,7 +57,6 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
             .with_inner_size([420.0, 500.0])
-            .with_position([-10000.0_f32, -10000.0_f32])
             .with_always_on_top()
             .with_resizable(false)
             .with_has_shadow(true)
@@ -73,15 +72,29 @@ fn main() -> eframe::Result<()> {
         "GitMap",
         options,
         Box::new(move |_cc| {
-            // Set macOS activation policy to Accessory (no Dock icon, no menu bar)
+            // Set macOS to Accessory mode + order window to front
             #[cfg(target_os = "macos")]
             {
                 use objc2::MainThreadMarker;
-                use objc2_app_kit::NSApplication;
-                use objc2_app_kit::NSApplicationActivationPolicy;
+                use objc2_app_kit::{
+                    NSApplication, NSApplicationActivationPolicy,
+                    NSWindowCollectionBehavior,
+                };
+
                 let mtm = unsafe { MainThreadMarker::new_unchecked() };
-                let app = NSApplication::sharedApplication(mtm);
-                app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+                let ns_app = NSApplication::sharedApplication(mtm);
+                ns_app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+
+                // Make our window behave as a popover-style panel:
+                // - can join all spaces
+                // - can activate regardless of policy
+                if let Some(window) = ns_app.mainWindow() {
+                    window.setCollectionBehavior(
+                        NSWindowCollectionBehavior::CanJoinAllSpaces
+                            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+                    );
+                    window.setLevel(3); // NSPopUpMenuWindowLevel-ish
+                }
             }
 
             let tray = tray_icon::TrayIconBuilder::new()
