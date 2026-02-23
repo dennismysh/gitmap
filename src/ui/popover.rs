@@ -407,20 +407,7 @@ impl eframe::App for GitMapApp {
 
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
 
-        // Auto-hide when the window loses focus (disabled temporarily for debugging)
-        // TODO: re-enable with a frame delay guard
-        // if self.visible {
-        //     let has_focus = ctx.input(|i| i.focused);
-        //     if !has_focus {
-        //         self.visible = false;
-        //         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-        //     }
-        // }
-
-        if !self.visible {
-            return;
-        }
-
+        // Always render content (window lives off-screen when hidden)
         let frame = egui::Frame::new()
             .fill(egui::Color32::from_rgb(13, 17, 23))
             .inner_margin(16.0)

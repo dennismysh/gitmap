@@ -57,6 +57,7 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
             .with_inner_size([420.0, 500.0])
+            .with_position([-10000.0_f32, -10000.0_f32])
             .with_always_on_top()
             .with_resizable(false)
             .with_has_shadow(true)
