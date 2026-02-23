@@ -365,7 +365,7 @@ impl eframe::App for GitMapApp {
                     self.last_icon_rect = Some(icon_rect);
                     self.visible = !self.visible;
                     if self.visible {
-                        // Always reposition under the tray icon
+                        // Position under the tray icon
                         if let Some(ref rect) = self.last_icon_rect {
                             let icon_center_x =
                                 rect.position.x + (rect.size.width as f64 / 2.0);
@@ -377,10 +377,12 @@ impl eframe::App for GitMapApp {
                                 egui::pos2(x as f32, y as f32),
                             ));
                         }
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     } else {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        // Hide by moving off-screen
+                        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                            egui::pos2(-10000.0, -10000.0),
+                        ));
                     }
                 }
                 TrayMessage::Quit => {

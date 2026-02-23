@@ -7,20 +7,6 @@ use gitmap::store::CommitStore;
 use gitmap::ui::popover::{GitMapApp, TrayMessage};
 
 fn main() -> eframe::Result<()> {
-    // Set macOS activation policy to Accessory:
-    // - No Dock icon
-    // - No menu bar (Window/Help)
-    // - App behaves as a background agent with just the tray icon
-    #[cfg(target_os = "macos")]
-    {
-        use objc2::MainThreadMarker;
-        use objc2_app_kit::NSApplication;
-        use objc2_app_kit::NSApplicationActivationPolicy;
-        let mtm = unsafe { MainThreadMarker::new_unchecked() };
-        let app = NSApplication::sharedApplication(mtm);
-        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-    }
-
     let config = Config::load();
 
     let history_path = gitmap::config::data_dir().join("history.json");
@@ -70,7 +56,8 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
-            .with_inner_size([420.0, 380.0])
+            .with_inner_size([420.0, 500.0])
+            .with_position([-10000.0_f32, -10000.0_f32])
             .with_always_on_top()
             .with_resizable(false)
             .with_has_shadow(true)
@@ -86,6 +73,17 @@ fn main() -> eframe::Result<()> {
         "GitMap",
         options,
         Box::new(move |_cc| {
+            // Set macOS activation policy to Accessory (no Dock icon, no menu bar)
+            #[cfg(target_os = "macos")]
+            {
+                use objc2::MainThreadMarker;
+                use objc2_app_kit::NSApplication;
+                use objc2_app_kit::NSApplicationActivationPolicy;
+                let mtm = unsafe { MainThreadMarker::new_unchecked() };
+                let app = NSApplication::sharedApplication(mtm);
+                app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+            }
+
             let tray = tray_icon::TrayIconBuilder::new()
                 .with_icon(icon)
                 .with_icon_as_template(true)
