@@ -56,9 +56,13 @@ pub fn scan_repo(
         let oid = oid_result?;
         let commit = repo.find_commit(oid)?;
 
-        let timestamp = commit.time().seconds();
+        let git_time = commit.time();
+        let timestamp = git_time.seconds();
+        let offset_minutes = git_time.offset_minutes();
+        let offset = chrono::FixedOffset::east_opt(offset_minutes as i32 * 60)
+            .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
         let date = chrono::DateTime::from_timestamp(timestamp, 0)
-            .map(|dt| dt.naive_local().date())
+            .map(|dt| dt.with_timezone(&offset).date_naive())
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
 
         if let Some(since_date) = since {
