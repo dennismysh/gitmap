@@ -95,11 +95,10 @@ pub fn scan_repo(
             let diff_stats = diff.stats()?;
             (diff_stats.insertions() as u32, diff_stats.deletions() as u32)
         } else {
-            // Initial commit (no parents) — diff against empty tree
-            let commit_tree = commit.tree()?;
-            let diff = repo.diff_tree_to_tree(None, Some(&commit_tree), None)?;
-            let diff_stats = diff.stats()?;
-            (diff_stats.insertions() as u32, diff_stats.deletions() as u32)
+            // Initial commit (no parents) — skip line stats.
+            // These are almost always project scaffolding / generated files
+            // (e.g. Unity boilerplate) that inflate stats meaninglessly.
+            (0, 0)
         };
 
         let entry = stats.entry(date).or_insert(DayStats {

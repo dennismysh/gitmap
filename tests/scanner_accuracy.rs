@@ -170,14 +170,14 @@ fn test_exact_insertion_deletion_counts() {
     let day = stats.get(&mar1).expect("Should have stats for Mar 1");
 
     assert_eq!(day.commits, 2, "Two commits on Mar 1");
-    // Initial commit: +3 insertions (3 new lines), 0 deletions
+    // Initial commit: line stats skipped (scaffolding noise)
     // Second commit: +2 insertions, -1 deletion
-    assert_eq!(day.insertions, 5, "3 initial + 2 modified = 5 insertions");
+    assert_eq!(day.insertions, 2, "only second commit lines counted");
     assert_eq!(day.deletions, 1, "1 line replaced = 1 deletion");
 }
 
 #[test]
-fn test_initial_commit_counts_all_lines_as_insertions() {
+fn test_initial_commit_skips_line_stats() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
 
@@ -204,9 +204,9 @@ fn test_initial_commit_counts_all_lines_as_insertions() {
     let apr1 = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
     let day = stats.get(&apr1).expect("Should have stats for Apr 1");
 
-    assert_eq!(day.commits, 1);
-    assert_eq!(day.insertions, 5, "5 lines in initial commit");
-    assert_eq!(day.deletions, 0, "No deletions in initial commit");
+    assert_eq!(day.commits, 1, "initial commit still counts");
+    assert_eq!(day.insertions, 0, "line stats skipped for initial commits");
+    assert_eq!(day.deletions, 0, "line stats skipped for initial commits");
 }
 
 #[test]
@@ -262,11 +262,10 @@ fn test_merge_commit_uses_first_parent_diff() {
 
     // 3 commits: initial, feature, merge
     assert_eq!(day.commits, 3, "Should count initial + feature + merge commits");
-    // Merge commits skip line stats to avoid double-counting.
+    // Initial commit = 0 (skipped, scaffolding noise)
     // Feature commit = +2 lines (feature.txt)
-    // Initial commit = +1 line (main.txt)
-    // Merge commit = 0 (skipped, lines already counted by feature commit)
-    // Total = 3 insertions
-    assert_eq!(day.insertions, 3, "initial(1) + feature(2), merge skipped");
+    // Merge commit = 0 (skipped, avoids double-counting)
+    // Total = 2 insertions
+    assert_eq!(day.insertions, 2, "feature(2), initial+merge skipped");
     assert_eq!(day.deletions, 0);
 }
