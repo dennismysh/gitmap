@@ -66,7 +66,7 @@ pub fn scan_repo(
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
 
         if let Some(since_date) = since {
-            if date < since_date {
+            if date <= since_date {
                 break;
             }
         }

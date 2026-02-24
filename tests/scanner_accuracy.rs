@@ -49,3 +49,51 @@ fn test_commit_date_uses_author_timezone() {
         stats.keys().collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn test_incremental_scan_excludes_since_date() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+
+    Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.name", "Test User"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(path).output().unwrap();
+
+    // Commit on Feb 10
+    std::fs::write(path.join("a.txt"), "aaa\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "first"])
+        .env("GIT_AUTHOR_DATE", "2026-02-10 12:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-02-10 12:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    // Commit on Feb 15
+    std::fs::write(path.join("b.txt"), "bbb\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "second"])
+        .env("GIT_AUTHOR_DATE", "2026-02-15 12:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-02-15 12:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let identity = GitIdentity {
+        name: "Test User".to_string(),
+        email: "test@example.com".to_string(),
+    };
+
+    // Incremental scan since Feb 15 should NOT include the Feb 15 commit
+    // (it was already counted in a previous full scan)
+    let since = NaiveDate::from_ymd_opt(2026, 2, 15).unwrap();
+    let stats = scan_repo(path, &identity, Some(since)).unwrap();
+
+    let feb15 = NaiveDate::from_ymd_opt(2026, 2, 15).unwrap();
+    assert!(
+        !stats.contains_key(&feb15),
+        "Incremental scan with since=Feb15 should exclude Feb 15 commits to prevent double-counting"
+    );
+}
