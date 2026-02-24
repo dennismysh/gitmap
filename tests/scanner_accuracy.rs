@@ -97,3 +97,33 @@ fn test_incremental_scan_excludes_since_date() {
         "Incremental scan with since=Feb15 should exclude Feb 15 commits to prevent double-counting"
     );
 }
+
+#[test]
+fn test_scan_filters_by_matching_identity_name_or_email() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+
+    Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.name", "Work Name"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.email", "work@company.com"]).current_dir(path).output().unwrap();
+
+    std::fs::write(path.join("file.txt"), "content\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git").args(["commit", "-m", "work commit"]).current_dir(path).output().unwrap();
+
+    // Using personal identity should NOT match (different name AND email)
+    let personal = GitIdentity {
+        name: "Personal Name".to_string(),
+        email: "personal@email.com".to_string(),
+    };
+    let stats = scan_repo(path, &personal, None).unwrap();
+    assert!(stats.is_empty(), "Personal identity should not match work commits");
+
+    // Using identity with matching email should match
+    let email_match = GitIdentity {
+        name: "Different Name".to_string(),
+        email: "work@company.com".to_string(),
+    };
+    let stats = scan_repo(path, &email_match, None).unwrap();
+    assert!(!stats.is_empty(), "Matching email should find commits even with different name");
+}

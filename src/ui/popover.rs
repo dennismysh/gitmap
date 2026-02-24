@@ -57,17 +57,24 @@ impl GitMapApp {
     }
 
     pub fn initial_scan(&mut self) {
-        let identity = match &self.identity {
-            Some(id) => id.clone(),
-            None => return,
-        };
         // Full rescan: start fresh to avoid double-counting
         self.store = CommitStore::new();
         for repo in &self.config.tracked_repos {
+            // Detect identity per-repo to handle different user configs
+            let identity = match scanner::detect_identity(repo) {
+                Ok(id) => id,
+                Err(_) => continue,
+            };
             if let Ok(stats) = scanner::scan_repo(repo, &identity, None) {
                 self.store.merge(stats);
             }
         }
+        // Update the display identity from first repo (for settings UI)
+        self.identity = self
+            .config
+            .tracked_repos
+            .first()
+            .and_then(|p| scanner::detect_identity(p).ok());
         let history_path = crate::config::data_dir().join("history.json");
         let _ = self.store.save_to(&history_path);
     }
@@ -347,10 +354,14 @@ impl eframe::App for GitMapApp {
             .unwrap_or_default();
 
         if !changed_repos.is_empty() {
-            if let Some(ref identity) = self.identity {
-                let identity = identity.clone();
+            {
                 let since = self.store.most_recent_date();
                 for repo_path in &changed_repos {
+                    // Detect identity per-repo
+                    let identity = match scanner::detect_identity(repo_path) {
+                        Ok(id) => id,
+                        Err(_) => continue,
+                    };
                     if let Ok(stats) = scanner::scan_repo(repo_path, &identity, since) {
                         self.store.merge(stats);
                     }
