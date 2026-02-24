@@ -127,3 +127,144 @@ fn test_scan_filters_by_matching_identity_name_or_email() {
     let stats = scan_repo(path, &email_match, None).unwrap();
     assert!(!stats.is_empty(), "Matching email should find commits even with different name");
 }
+
+#[test]
+fn test_exact_insertion_deletion_counts() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+
+    Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.name", "Test User"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(path).output().unwrap();
+
+    // Initial commit: 3 lines
+    std::fs::write(path.join("file.txt"), "line1\nline2\nline3\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "initial"])
+        .env("GIT_AUTHOR_DATE", "2026-03-01 12:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-03-01 12:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    // Second commit: change line2 to line2-modified, add line4
+    // Expected: +2 insertions (line2-modified, line4), -1 deletion (line2)
+    std::fs::write(path.join("file.txt"), "line1\nline2-modified\nline3\nline4\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "modify"])
+        .env("GIT_AUTHOR_DATE", "2026-03-01 14:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-03-01 14:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let identity = GitIdentity {
+        name: "Test User".to_string(),
+        email: "test@example.com".to_string(),
+    };
+
+    let stats = scan_repo(path, &identity, None).unwrap();
+    let mar1 = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
+    let day = stats.get(&mar1).expect("Should have stats for Mar 1");
+
+    assert_eq!(day.commits, 2, "Two commits on Mar 1");
+    // Initial commit: +3 insertions (3 new lines), 0 deletions
+    // Second commit: +2 insertions, -1 deletion
+    assert_eq!(day.insertions, 5, "3 initial + 2 modified = 5 insertions");
+    assert_eq!(day.deletions, 1, "1 line replaced = 1 deletion");
+}
+
+#[test]
+fn test_initial_commit_counts_all_lines_as_insertions() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+
+    Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.name", "Test User"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(path).output().unwrap();
+
+    std::fs::write(path.join("file.txt"), "a\nb\nc\nd\ne\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "initial"])
+        .env("GIT_AUTHOR_DATE", "2026-04-01 12:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-04-01 12:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let identity = GitIdentity {
+        name: "Test User".to_string(),
+        email: "test@example.com".to_string(),
+    };
+
+    let stats = scan_repo(path, &identity, None).unwrap();
+    let apr1 = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+    let day = stats.get(&apr1).expect("Should have stats for Apr 1");
+
+    assert_eq!(day.commits, 1);
+    assert_eq!(day.insertions, 5, "5 lines in initial commit");
+    assert_eq!(day.deletions, 0, "No deletions in initial commit");
+}
+
+#[test]
+fn test_merge_commit_uses_first_parent_diff() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+
+    Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.name", "Test User"]).current_dir(path).output().unwrap();
+    Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(path).output().unwrap();
+
+    // Initial commit on main
+    std::fs::write(path.join("main.txt"), "main\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "initial"])
+        .env("GIT_AUTHOR_DATE", "2026-05-01 10:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-05-01 10:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    // Create branch and add file
+    Command::new("git").args(["checkout", "-b", "feature"]).current_dir(path).output().unwrap();
+    std::fs::write(path.join("feature.txt"), "feature\nline2\n").unwrap();
+    Command::new("git").args(["add", "."]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "feature commit"])
+        .env("GIT_AUTHOR_DATE", "2026-05-01 11:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-05-01 11:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    // Back to main, merge
+    Command::new("git").args(["checkout", "main"]).current_dir(path).output().unwrap();
+    Command::new("git")
+        .args(["merge", "feature", "--no-ff", "-m", "merge feature"])
+        .env("GIT_AUTHOR_DATE", "2026-05-01 12:00:00 +0000")
+        .env("GIT_COMMITTER_DATE", "2026-05-01 12:00:00 +0000")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let identity = GitIdentity {
+        name: "Test User".to_string(),
+        email: "test@example.com".to_string(),
+    };
+
+    let stats = scan_repo(path, &identity, None).unwrap();
+    let may1 = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+    let day = stats.get(&may1).expect("Should have stats for May 1");
+
+    // 3 commits: initial, feature, merge
+    assert_eq!(day.commits, 3, "Should count initial + feature + merge commits");
+    // Merge commit diff vs first parent (main) = +2 lines (feature.txt)
+    // Feature commit = +2 lines (feature.txt)
+    // Initial commit = +1 line (main.txt)
+    // Total = 5 insertions
+    assert_eq!(day.insertions, 5, "initial(1) + feature(2) + merge-vs-first-parent(2)");
+}
