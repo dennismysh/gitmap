@@ -262,9 +262,11 @@ fn test_merge_commit_uses_first_parent_diff() {
 
     // 3 commits: initial, feature, merge
     assert_eq!(day.commits, 3, "Should count initial + feature + merge commits");
-    // Merge commit diff vs first parent (main) = +2 lines (feature.txt)
+    // Merge commits skip line stats to avoid double-counting.
     // Feature commit = +2 lines (feature.txt)
     // Initial commit = +1 line (main.txt)
-    // Total = 5 insertions
-    assert_eq!(day.insertions, 5, "initial(1) + feature(2) + merge-vs-first-parent(2)");
+    // Merge commit = 0 (skipped, lines already counted by feature commit)
+    // Total = 3 insertions
+    assert_eq!(day.insertions, 3, "initial(1) + feature(2), merge skipped");
+    assert_eq!(day.deletions, 0);
 }

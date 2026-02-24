@@ -79,14 +79,23 @@ pub fn scan_repo(
             continue;
         }
 
-        let (insertions, deletions) = if commit.parent_count() > 0 {
+        // Skip line stats for merge commits (parent_count > 1) to avoid
+        // double-counting: the constituent commits already account for the
+        // same line changes. Merge commits still count toward commit totals.
+        let (insertions, deletions) = if commit.parent_count() > 1 {
+            (0, 0)
+        } else if commit.parent_count() == 1 {
             let parent = commit.parent(0)?;
             let parent_tree = parent.tree()?;
             let commit_tree = commit.tree()?;
-            let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), None)?;
+            let mut diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), None)?;
+            let mut find_opts = git2::DiffFindOptions::new();
+            find_opts.renames(true);
+            diff.find_similar(Some(&mut find_opts))?;
             let diff_stats = diff.stats()?;
             (diff_stats.insertions() as u32, diff_stats.deletions() as u32)
         } else {
+            // Initial commit (no parents) — diff against empty tree
             let commit_tree = commit.tree()?;
             let diff = repo.diff_tree_to_tree(None, Some(&commit_tree), None)?;
             let diff_stats = diff.stats()?;
