@@ -61,3 +61,92 @@ fn git_cli_stats(repo_path: &Path, identity: &GitIdentity) -> HashMap<NaiveDate,
 
     stats
 }
+
+#[test]
+fn audit_scanner_accuracy() {
+    let config = Config::load();
+
+    if config.tracked_repos.is_empty() {
+        eprintln!("No tracked repos configured — skipping audit");
+        return;
+    }
+
+    let mut total_discrepancies = 0;
+
+    for repo_path in &config.tracked_repos {
+        let repo_name = repo_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| repo_path.display().to_string());
+
+        let identity = match scanner::detect_identity(repo_path) {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!("  SKIP {}: failed to detect identity: {}", repo_name, e);
+                continue;
+            }
+        };
+
+        let gitmap_stats = match scanner::scan_repo(repo_path, &identity, None) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("  SKIP {}: scan_repo failed: {}", repo_name, e);
+                continue;
+            }
+        };
+
+        let cli_stats = git_cli_stats(repo_path, &identity);
+
+        // Collect all dates from both sources
+        let mut all_dates: Vec<NaiveDate> = gitmap_stats
+            .keys()
+            .chain(cli_stats.keys())
+            .copied()
+            .collect();
+        all_dates.sort();
+        all_dates.dedup();
+
+        let mut repo_discrepancies = 0;
+
+        eprintln!("\n=== {} ({}) ===", repo_name, repo_path.display());
+        eprintln!("  Identity: {} <{}>", identity.name, identity.email);
+        eprintln!(
+            "  gitmap total days: {}, git CLI total days: {}",
+            gitmap_stats.len(),
+            cli_stats.len()
+        );
+
+        for date in &all_dates {
+            let gm = gitmap_stats.get(date);
+            let cli = cli_stats.get(date);
+
+            let (gm_commits, gm_ins, gm_del) = gm
+                .map(|s| (s.commits, s.insertions, s.deletions))
+                .unwrap_or((0, 0, 0));
+            let (cli_commits, cli_ins, cli_del) = cli
+                .map(|s| (s.commits, s.insertions, s.deletions))
+                .unwrap_or((0, 0, 0));
+
+            if gm_commits != cli_commits || gm_ins != cli_ins || gm_del != cli_del {
+                repo_discrepancies += 1;
+                eprintln!(
+                    "  MISMATCH {}: gitmap({} commits, +{} -{}) vs cli({} commits, +{} -{})",
+                    date, gm_commits, gm_ins, gm_del, cli_commits, cli_ins, cli_del
+                );
+            }
+        }
+
+        if repo_discrepancies == 0 {
+            eprintln!("  ALL MATCH ({} days compared)", all_dates.len());
+        } else {
+            eprintln!(
+                "  {} discrepancies out of {} days",
+                repo_discrepancies,
+                all_dates.len()
+            );
+        }
+        total_discrepancies += repo_discrepancies;
+    }
+
+    eprintln!("\n=== SUMMARY: {} total discrepancies ===", total_discrepancies);
+}
