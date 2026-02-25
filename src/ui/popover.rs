@@ -430,6 +430,35 @@ impl eframe::App for GitMapApp {
             }
         }
 
+        // Check for binary update (auto-relaunch)
+        if let Some(ref rx) = self.binary_watcher_rx {
+            while let Ok(Ok(event)) = rx.try_recv() {
+                if let Some(ref exe) = self.binary_path {
+                    if event.paths.iter().any(|p| p == exe) {
+                        if self.binary_changed_at.is_none() {
+                            self.binary_changed_at = Some(std::time::Instant::now());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Debounced relaunch after binary change (500ms for copy to finish)
+        if let Some(changed_at) = self.binary_changed_at {
+            if changed_at.elapsed() >= std::time::Duration::from_millis(500) {
+                let _ = self.config.save();
+                let history_path = crate::config::data_dir().join("history.json");
+                let _ = self.store.save_to(&history_path);
+
+                if let Some(ref exe) = self.binary_path {
+                    let _ = std::process::Command::new(exe).spawn();
+                }
+
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
+            }
+        }
+
         // Track focus loss for click-outside-to-hide
         let focused = ctx.input(|i| i.viewport().focused);
         match focused {
