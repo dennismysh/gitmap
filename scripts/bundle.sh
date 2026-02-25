@@ -32,3 +32,7 @@ cp "$PROJECT_DIR/resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$PROJECT_DIR/resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 echo "Built: $APP_DIR"
+
+# Install to /Applications
+cp -R "$APP_DIR" /Applications/GitMap.app
+echo "Installed: /Applications/GitMap.app"
