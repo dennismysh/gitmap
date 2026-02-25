@@ -27,6 +27,28 @@ pub fn grid_dates(year: i32) -> Vec<Vec<NaiveDate>> {
     weeks
 }
 
+/// Generate the grid of dates for an arbitrary date range.
+/// Returns Vec<Vec<NaiveDate>> where outer = weeks (columns), inner = days Mon-Sun (rows).
+/// Pads first and last weeks to always have 7 entries.
+pub fn grid_dates_range(start: NaiveDate, end: NaiveDate) -> Vec<Vec<NaiveDate>> {
+    let first = start - chrono::Duration::days(start.weekday().num_days_from_monday() as i64);
+    let last = end + chrono::Duration::days(6 - end.weekday().num_days_from_monday() as i64);
+
+    let mut weeks = Vec::new();
+    let mut current = first;
+
+    while current <= last {
+        let mut week = Vec::with_capacity(7);
+        for _ in 0..7 {
+            week.push(current);
+            current += chrono::Duration::days(1);
+        }
+        weeks.push(week);
+    }
+
+    weeks
+}
+
 /// Map a value to a level 0-4 based on the maximum value in the dataset.
 pub fn level_for_value(value: u32, max_value: u32) -> u8 {
     if value == 0 {
