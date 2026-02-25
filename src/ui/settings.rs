@@ -231,6 +231,37 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                 }
                 response.on_hover_text(*name);
             }
+
+            // Custom hex color preview swatch
+            let is_preset = PRESET_COLORS.iter().any(|(_, hex)| config.accent_color == *hex);
+            let trimmed = state.hex_input.trim();
+            let valid_hex = trimmed.len() == 7 && trimmed.starts_with('#');
+            let [cr, cg, cb] = if valid_hex {
+                parse_hex_rgb(trimmed)
+            } else {
+                [80, 80, 80]
+            };
+            let custom_selected = !is_preset && valid_hex && config.accent_color == trimmed;
+            let size = if custom_selected { 24.0 } else { 20.0 };
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
+            ui.painter().rect_filled(
+                rect,
+                egui::CornerRadius::same(4),
+                egui::Color32::from_rgb(cr, cg, cb),
+            );
+            if custom_selected {
+                ui.painter().rect_stroke(
+                    rect,
+                    egui::CornerRadius::same(4),
+                    egui::Stroke::new(2.0, egui::Color32::WHITE),
+                    egui::StrokeKind::Outside,
+                );
+            }
+            if response.clicked() && valid_hex {
+                config.accent_color = trimmed.to_string();
+            }
+            response.on_hover_text("Custom");
         });
 
         ui.add_space(4.0);
