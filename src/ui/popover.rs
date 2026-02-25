@@ -1,4 +1,5 @@
 use eframe::egui;
+use notify::Watcher;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 
@@ -28,6 +29,10 @@ pub struct GitMapApp {
     last_icon_rect: Option<tray_icon::Rect>,
     focus_lost_at: Option<std::time::Instant>,
     file_picker_active: Arc<AtomicBool>,
+    binary_path: Option<std::path::PathBuf>,
+    binary_watcher_rx: Option<mpsc::Receiver<notify::Result<notify::Event>>>,
+    _binary_watcher: Option<notify::RecommendedWatcher>,
+    binary_changed_at: Option<std::time::Instant>,
 }
 
 impl GitMapApp {
@@ -46,6 +51,24 @@ impl GitMapApp {
 
         let settings_state = SettingsState::new(&config);
         let file_picker_active = Arc::clone(&settings_state.file_picker_active);
+
+        // Watch own binary for updates
+        let (binary_path, binary_watcher_rx, binary_watcher) = {
+            if let Ok(exe) = std::env::current_exe() {
+                let exe = exe.canonicalize().unwrap_or(exe);
+                let (tx, rx) = mpsc::channel();
+                let mut watcher = notify::recommended_watcher(tx).ok();
+                if let Some(ref mut w) = watcher {
+                    if let Some(parent) = exe.parent() {
+                        let _ = w.watch(parent, notify::RecursiveMode::NonRecursive);
+                    }
+                }
+                (Some(exe), Some(rx), watcher)
+            } else {
+                (None, None, None)
+            }
+        };
+
         Self {
             tray_rx,
             visible: false,
@@ -59,6 +82,10 @@ impl GitMapApp {
             last_icon_rect: None,
             focus_lost_at: None,
             file_picker_active,
+            binary_path,
+            binary_watcher_rx,
+            _binary_watcher: binary_watcher,
+            binary_changed_at: None,
         }
     }
 
