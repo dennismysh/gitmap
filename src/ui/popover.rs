@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 
 use crate::config::{Config, DataMode, TimeRange, ViewMode};
-use crate::heatmap::{color_for_level, grid_dates, level_for_value};
+use crate::heatmap::{color_for_level, grid_dates, grid_dates_range, level_for_value};
 use crate::scanner::{self, GitIdentity};
 use crate::store::CommitStore;
 use crate::ui::settings::{self, SettingsState};
@@ -149,7 +149,14 @@ impl GitMapApp {
     }
 
     fn draw_heatmap(&mut self, ui: &mut egui::Ui) {
-        let weeks = grid_dates(self.config.selected_year);
+        let weeks = match self.config.view_mode {
+            ViewMode::Year => grid_dates(self.config.selected_year),
+            ViewMode::Rolling => {
+                let today = chrono::Local::now().naive_local().date();
+                let start = today - chrono::Duration::days(self.config.time_range.days());
+                grid_dates_range(start, today)
+            }
+        };
         let cell_size = 14.0_f32;
         let cell_spacing = 3.0_f32;
         let label_width = 30.0_f32;
