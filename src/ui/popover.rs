@@ -252,10 +252,22 @@ impl GitMapApp {
     }
 
     fn draw_stats(&self, ui: &mut egui::Ui) {
-        use chrono::Datelike;
-
-        let year = self.config.selected_year;
         let stats = self.store.stats();
+        let today = chrono::Local::now().naive_local().date();
+
+        let (range_start, range_end) = match self.config.view_mode {
+            ViewMode::Year => {
+                let year = self.config.selected_year;
+                (
+                    chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap(),
+                    chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap(),
+                )
+            }
+            ViewMode::Rolling => {
+                let start = today - chrono::Duration::days(self.config.time_range.days());
+                (start, today)
+            }
+        };
 
         let mut total_commits: u32 = 0;
         let mut total_insertions: u32 = 0;
@@ -264,9 +276,8 @@ impl GitMapApp {
         let mut current_streak: u32 = 0;
         let mut longest_streak: u32 = 0;
 
-        // Collect stats for the selected year
         for (date, day) in stats {
-            if date.year() == year {
+            if *date >= range_start && *date <= range_end {
                 total_commits += day.commits;
                 total_insertions += day.insertions;
                 total_deletions += day.deletions;
@@ -277,7 +288,6 @@ impl GitMapApp {
         }
 
         // Calculate current streak (consecutive days ending today or yesterday)
-        let today = chrono::Local::now().naive_local().date();
         let mut check_date = today;
         loop {
             if let Some(day) = stats.get(&check_date) {
@@ -287,7 +297,6 @@ impl GitMapApp {
                     continue;
                 }
             }
-            // Allow streak to start from yesterday if today has no commits yet
             if check_date == today && current_streak == 0 {
                 check_date -= chrono::Duration::days(1);
                 continue;
@@ -295,12 +304,10 @@ impl GitMapApp {
             break;
         }
 
-        // Calculate longest streak in the year
-        let jan1 = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
-        let dec31 = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+        // Calculate longest streak in the visible range
         let mut streak: u32 = 0;
-        let mut d = jan1;
-        while d <= dec31 {
+        let mut d = range_start;
+        while d <= range_end {
             if stats.get(&d).map(|s| s.commits > 0).unwrap_or(false) {
                 streak += 1;
                 longest_streak = longest_streak.max(streak);
