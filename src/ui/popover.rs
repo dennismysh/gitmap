@@ -1,5 +1,6 @@
 use eframe::egui;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 
 use crate::config::{Config, DataMode, TimeRange};
 use crate::heatmap::{color_for_level, grid_dates, level_for_value};
@@ -25,6 +26,8 @@ pub struct GitMapApp {
     identity: Option<GitIdentity>,
     watcher: Option<RepoWatcher>,
     last_icon_rect: Option<tray_icon::Rect>,
+    focus_lost_at: Option<std::time::Instant>,
+    file_picker_active: Arc<AtomicBool>,
 }
 
 impl GitMapApp {
@@ -42,6 +45,7 @@ impl GitMapApp {
         }
 
         let settings_state = SettingsState::new(&config);
+        let file_picker_active = Arc::clone(&settings_state.file_picker_active);
         Self {
             tray_rx,
             visible: false,
@@ -53,6 +57,8 @@ impl GitMapApp {
             identity,
             watcher,
             last_icon_rect: None,
+            focus_lost_at: None,
+            file_picker_active,
         }
     }
 
@@ -371,10 +377,23 @@ impl eframe::App for GitMapApp {
             }
         }
 
+        // Track focus loss for click-outside-to-hide
+        let focused = ctx.input(|i| i.viewport().focused);
+        match focused {
+            Some(true) => {
+                self.focus_lost_at = None;
+            }
+            Some(false) if self.visible && self.focus_lost_at.is_none() => {
+                self.focus_lost_at = Some(std::time::Instant::now());
+            }
+            _ => {}
+        }
+
         while let Ok(msg) = self.tray_rx.try_recv() {
             match msg {
                 TrayMessage::ToggleWindow { icon_rect } => {
                     self.last_icon_rect = Some(icon_rect);
+                    self.focus_lost_at = None;
                     self.visible = !self.visible;
                     if self.visible {
                         // Position under the tray icon
@@ -402,6 +421,19 @@ impl eframe::App for GitMapApp {
                 TrayMessage::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
+            }
+        }
+
+        // Debounced click-outside-to-hide
+        if let Some(lost_at) = self.focus_lost_at {
+            if lost_at.elapsed() >= std::time::Duration::from_millis(150)
+                && !self.file_picker_active.load(Ordering::Relaxed)
+            {
+                self.visible = false;
+                self.focus_lost_at = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    egui::pos2(-10000.0, -10000.0),
+                ));
             }
         }
 

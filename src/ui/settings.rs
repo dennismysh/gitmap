@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::discovery::discover_repos;
 use eframe::egui;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub struct SettingsState {
@@ -10,6 +11,7 @@ pub struct SettingsState {
     pub hex_input: String,
     /// Repos that were removed this session — available to re-add
     pub untracked_repos: Vec<PathBuf>,
+    pub file_picker_active: Arc<AtomicBool>,
 }
 
 impl SettingsState {
@@ -19,6 +21,7 @@ impl SettingsState {
             discover_result: Arc::new(Mutex::new(None)),
             hex_input: config.accent_color.clone(),
             untracked_repos: Vec::new(),
+            file_picker_active: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -137,6 +140,8 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
             if ui.button("Add Repository...").clicked() {
                 let result = Arc::clone(&state.folder_picker_result);
                 let ctx = ui.ctx().clone();
+                let picker_flag = Arc::clone(&state.file_picker_active);
+                picker_flag.store(true, Ordering::Relaxed);
                 std::thread::spawn(move || {
                     let folder = rfd::FileDialog::new()
                         .set_title("Select Git Repository")
@@ -144,6 +149,7 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                     if let Ok(mut guard) = result.lock() {
                         *guard = folder.map(|p| vec![p]);
                     }
+                    picker_flag.store(false, Ordering::Relaxed);
                     ctx.request_repaint();
                 });
             }
@@ -151,6 +157,8 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
             if ui.button("Scan Directory...").clicked() {
                 let result = Arc::clone(&state.discover_result);
                 let ctx = ui.ctx().clone();
+                let picker_flag = Arc::clone(&state.file_picker_active);
+                picker_flag.store(true, Ordering::Relaxed);
                 std::thread::spawn(move || {
                     let folder = rfd::FileDialog::new()
                         .set_title("Select Parent Directory to Scan")
@@ -161,6 +169,7 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                             *guard = Some(repos);
                         }
                     }
+                    picker_flag.store(false, Ordering::Relaxed);
                     ctx.request_repaint();
                 });
             }
