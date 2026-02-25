@@ -418,7 +418,7 @@ impl eframe::App for GitMapApp {
                 Some(egui::Color32::from_rgb(230, 237, 243));
 
             if self.show_settings {
-                if ui.button("\u{2190} Back").clicked() {
+                if ui.button("\u{25C0} Back").clicked() {
                     self.show_settings = false;
                     let _ = self.config.save();
 
