@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeRange {
+    Week1,
+    Weeks2,
     Days30,
     Months3,
     Months6,
@@ -13,6 +15,8 @@ pub enum TimeRange {
 impl TimeRange {
     pub fn label(&self) -> &'static str {
         match self {
+            TimeRange::Week1 => "1 week",
+            TimeRange::Weeks2 => "2 weeks",
             TimeRange::Days30 => "30 days",
             TimeRange::Months3 => "3 months",
             TimeRange::Months6 => "6 months",
@@ -20,14 +24,33 @@ impl TimeRange {
         }
     }
 
+    pub fn days(&self) -> i64 {
+        match self {
+            TimeRange::Week1 => 7,
+            TimeRange::Weeks2 => 14,
+            TimeRange::Days30 => 30,
+            TimeRange::Months3 => 90,
+            TimeRange::Months6 => 180,
+            TimeRange::Months12 => 365,
+        }
+    }
+
     pub fn all() -> &'static [TimeRange] {
         &[
+            TimeRange::Week1,
+            TimeRange::Weeks2,
             TimeRange::Days30,
             TimeRange::Months3,
             TimeRange::Months6,
             TimeRange::Months12,
         ]
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ViewMode {
+    Year,
+    Rolling,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +76,7 @@ pub struct Config {
     pub time_range: TimeRange,
     pub data_mode: DataMode,
     pub selected_year: i32,
+    pub view_mode: ViewMode,
 }
 
 impl Default for Config {
@@ -64,6 +88,7 @@ impl Default for Config {
             time_range: TimeRange::Months12,
             data_mode: DataMode::Commits,
             selected_year: chrono::Local::now().year(),
+            view_mode: ViewMode::Year,
         }
     }
 }
