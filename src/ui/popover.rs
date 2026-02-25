@@ -2,7 +2,7 @@ use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 
-use crate::config::{Config, DataMode, TimeRange};
+use crate::config::{Config, DataMode, TimeRange, ViewMode};
 use crate::heatmap::{color_for_level, grid_dates, level_for_value};
 use crate::scanner::{self, GitIdentity};
 use crate::store::CommitStore;
@@ -86,6 +86,11 @@ impl GitMapApp {
     }
 
     fn draw_header(&mut self, ui: &mut egui::Ui) {
+        let dim = egui::Color32::from_rgb(100, 110, 120);
+        let bright = egui::Color32::from_rgb(230, 237, 243);
+        let year_active = self.config.view_mode == ViewMode::Year;
+        let year_color = if year_active { bright } else { dim };
+
         ui.horizontal(|ui| {
             ui.heading("gitmap");
 
@@ -93,17 +98,21 @@ impl GitMapApp {
 
             if ui.small_button("\u{25C0}").clicked() {
                 self.config.selected_year -= 1;
+                self.config.view_mode = ViewMode::Year;
             }
             ui.label(
                 egui::RichText::new(format!("{}", self.config.selected_year))
                     .strong()
-                    .size(16.0),
+                    .size(16.0)
+                    .color(year_color),
             );
             if ui.small_button("\u{25B6}").clicked() {
                 self.config.selected_year += 1;
+                self.config.view_mode = ViewMode::Year;
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let prev_range = self.config.time_range;
                 egui::ComboBox::from_id_salt("time_range")
                     .selected_text(self.config.time_range.label())
                     .width(90.0)
@@ -116,6 +125,9 @@ impl GitMapApp {
                             );
                         }
                     });
+                if self.config.time_range != prev_range {
+                    self.config.view_mode = ViewMode::Rolling;
+                }
 
                 egui::ComboBox::from_id_salt("data_mode")
                     .selected_text(self.config.data_mode.label())
