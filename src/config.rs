@@ -69,6 +69,7 @@ impl DataMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub tracked_repos: Vec<PathBuf>,
     pub auto_discover_roots: Vec<PathBuf>,
@@ -77,6 +78,7 @@ pub struct Config {
     pub data_mode: DataMode,
     pub selected_year: i32,
     pub view_mode: ViewMode,
+    pub auto_update: bool,
 }
 
 impl Default for Config {
@@ -89,6 +91,7 @@ impl Default for Config {
             data_mode: DataMode::Commits,
             selected_year: chrono::Local::now().year(),
             view_mode: ViewMode::Year,
+            auto_update: false,
         }
     }
 }
