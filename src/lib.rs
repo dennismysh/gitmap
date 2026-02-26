@@ -4,4 +4,5 @@ pub mod heatmap;
 pub mod scanner;
 pub mod store;
 pub mod ui;
+pub mod updater;
 pub mod watcher;
