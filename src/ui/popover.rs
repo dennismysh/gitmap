@@ -34,6 +34,9 @@ pub struct GitMapApp {
     binary_watcher_rx: Option<mpsc::Receiver<notify::Result<notify::Event>>>,
     _binary_watcher: Option<notify::RecommendedWatcher>,
     binary_changed_at: Option<std::time::Instant>,
+    update_rx: Option<mpsc::Receiver<crate::updater::UpdateInfo>>,
+    available_update: Option<crate::updater::UpdateInfo>,
+    update_in_progress: bool,
 }
 
 impl GitMapApp {
@@ -70,6 +73,14 @@ impl GitMapApp {
             }
         };
 
+        // Check for updates in background
+        let (update_tx, update_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            if let Some(info) = crate::updater::check_for_update() {
+                let _ = update_tx.send(info);
+            }
+        });
+
         Self {
             tray_rx,
             visible: false,
@@ -87,6 +98,9 @@ impl GitMapApp {
             binary_watcher_rx,
             _binary_watcher: binary_watcher,
             binary_changed_at: None,
+            update_rx: Some(update_rx),
+            available_update: None,
+            update_in_progress: false,
         }
     }
 
@@ -459,6 +473,28 @@ impl eframe::App for GitMapApp {
 
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 return;
+            }
+        }
+
+        // Poll for update check result
+        if let Some(ref rx) = self.update_rx {
+            if let Ok(info) = rx.try_recv() {
+                if self.config.auto_update {
+                    self.update_in_progress = true;
+                    let url = info.download_url.clone();
+                    let ctx_clone = ctx.clone();
+                    std::thread::spawn(move || {
+                        if crate::updater::download_and_install(&url).is_ok() {
+                            let _ = std::process::Command::new(
+                                "/Applications/GitMap.app/Contents/MacOS/gitmap",
+                            )
+                            .spawn();
+                            ctx_clone.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    });
+                } else {
+                    self.available_update = Some(info);
+                }
             }
         }
 
