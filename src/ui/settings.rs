@@ -284,6 +284,21 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                 }
             }
         });
+
+        ui.add_space(12.0);
+
+        // --- Updates ---
+        ui.label(egui::RichText::new("Updates").strong().size(14.0));
+        ui.add_space(4.0);
+
+        ui.label(
+            egui::RichText::new(format!("Version: v{}", env!("CARGO_PKG_VERSION")))
+                .size(12.0)
+                .color(egui::Color32::from_rgb(139, 148, 158)),
+        );
+
+        ui.add_space(4.0);
+        ui.checkbox(&mut config.auto_update, "Auto-update (silent)");
     });
 }
 
