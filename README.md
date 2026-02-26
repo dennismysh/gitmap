@@ -96,3 +96,7 @@ Pushing a version tag triggers a GitHub Actions workflow that:
 git tag v0.3.0
 git push origin main v0.3.0
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
