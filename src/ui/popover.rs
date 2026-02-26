@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use eframe::egui;
 use notify::Watcher;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -127,34 +128,36 @@ impl GitMapApp {
                 self.config.selected_year -= 1;
                 self.config.view_mode = ViewMode::Year;
             }
-            ui.label(
+            let year_label = ui.label(
                 egui::RichText::new(format!("{}", self.config.selected_year))
                     .strong()
                     .size(16.0)
                     .color(year_color),
             );
+            if year_label.interact(egui::Sense::click()).clicked() {
+                self.config.selected_year = chrono::Local::now().naive_local().date().year();
+                self.config.view_mode = ViewMode::Year;
+            }
             if ui.small_button("\u{25B6}").clicked() {
                 self.config.selected_year += 1;
                 self.config.view_mode = ViewMode::Year;
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let prev_range = self.config.time_range;
                 egui::ComboBox::from_id_salt("time_range")
                     .selected_text(self.config.time_range.label())
                     .width(90.0)
                     .show_ui(ui, |ui| {
                         for &range in TimeRange::all() {
-                            ui.selectable_value(
+                            if ui.selectable_value(
                                 &mut self.config.time_range,
                                 range,
                                 range.label(),
-                            );
+                            ).clicked() {
+                                self.config.view_mode = ViewMode::Rolling;
+                            }
                         }
                     });
-                if self.config.time_range != prev_range {
-                    self.config.view_mode = ViewMode::Rolling;
-                }
 
                 egui::ComboBox::from_id_salt("data_mode")
                     .selected_text(self.config.data_mode.label())
@@ -495,6 +498,7 @@ impl eframe::App for GitMapApp {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     } else {
                         // Hide by moving off-screen
+                        self.show_settings = false;
                         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                             egui::pos2(-10000.0, -10000.0),
                         ));
@@ -512,6 +516,7 @@ impl eframe::App for GitMapApp {
                 && !self.file_picker_active.load(Ordering::Relaxed)
             {
                 self.visible = false;
+                self.show_settings = false;
                 self.focus_lost_at = None;
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                     egui::pos2(-10000.0, -10000.0),
