@@ -636,6 +636,38 @@ impl eframe::App for GitMapApp {
                 });
 
                 self.draw_stats(ui);
+
+                // Update banner
+                if let Some(ref info) = self.available_update {
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!("Update available: v{}", info.version))
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(88, 166, 255)),
+                        );
+                        if self.update_in_progress {
+                            ui.label(
+                                egui::RichText::new("Updating...")
+                                    .size(12.0)
+                                    .color(egui::Color32::from_rgb(139, 148, 158)),
+                            );
+                        } else if ui.small_button("Update").clicked() {
+                            self.update_in_progress = true;
+                            let url = info.download_url.clone();
+                            let ctx = ui.ctx().clone();
+                            std::thread::spawn(move || {
+                                if crate::updater::download_and_install(&url).is_ok() {
+                                    let _ = std::process::Command::new(
+                                        "/Applications/GitMap.app/Contents/MacOS/gitmap",
+                                    )
+                                    .spawn();
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                }
+                            });
+                        }
+                    });
+                }
             }
         });
     }
