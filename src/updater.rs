@@ -48,3 +48,62 @@ pub fn check_for_update() -> Option<UpdateInfo> {
         download_url: download_url.to_string(),
     })
 }
+
+/// Download the update zip and replace /Applications/GitMap.app.
+pub fn download_and_install(download_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = std::path::Path::new("/tmp/gitmap-update");
+
+    // Clean up any previous update attempt
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(tmp_dir)?;
+    }
+    std::fs::create_dir_all(tmp_dir)?;
+
+    let zip_path = tmp_dir.join("GitMap.zip");
+
+    // Download the zip
+    let response = ureq::get(download_url)
+        .header("User-Agent", "gitmap-updater")
+        .call()?;
+
+    let mut bytes = Vec::new();
+    use std::io::Read;
+    response.into_body().into_reader().read_to_end(&mut bytes)?;
+    std::fs::write(&zip_path, &bytes)?;
+
+    // Extract using ditto (macOS built-in, preserves attributes)
+    let status = std::process::Command::new("ditto")
+        .args(["-xk", &zip_path.to_string_lossy(), &tmp_dir.to_string_lossy()])
+        .status()?;
+
+    if !status.success() {
+        return Err("ditto extraction failed".into());
+    }
+
+    let extracted_app = tmp_dir.join("GitMap.app");
+    if !extracted_app.exists() {
+        return Err("GitMap.app not found in zip".into());
+    }
+
+    // Replace the installed app
+    let installed_app = std::path::Path::new("/Applications/GitMap.app");
+    if installed_app.exists() {
+        std::fs::remove_dir_all(installed_app)?;
+    }
+
+    let status = std::process::Command::new("mv")
+        .args([
+            extracted_app.to_string_lossy().to_string(),
+            "/Applications/GitMap.app".to_string(),
+        ])
+        .status()?;
+
+    if !status.success() {
+        return Err("failed to move GitMap.app to /Applications".into());
+    }
+
+    // Clean up temp dir
+    let _ = std::fs::remove_dir_all(tmp_dir);
+
+    Ok(())
+}
