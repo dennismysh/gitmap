@@ -481,8 +481,19 @@ impl eframe::App for GitMapApp {
         // Poll for update check result
         if let Some(ref rx) = self.update_rx {
             if let Ok(info) = rx.try_recv() {
-                if self.config.auto_update {
+                // Skip if we already updated to this version
+                let already_updated = self
+                    .config
+                    .last_updated_version
+                    .as_ref()
+                    .map(|v| v == &info.version)
+                    .unwrap_or(false);
+                if already_updated {
+                    // Don't show banner or auto-update
+                } else if self.config.auto_update {
                     self.update_in_progress = true;
+                    self.config.last_updated_version = Some(info.version.clone());
+                    let _ = self.config.save();
                     let url = info.download_url.clone();
                     let ctx_clone = ctx.clone();
                     std::thread::spawn(move || {
@@ -671,6 +682,8 @@ impl eframe::App for GitMapApp {
                             );
                         } else if ui.small_button("Update").clicked() {
                             self.update_in_progress = true;
+                            self.config.last_updated_version = Some(info.version.clone());
+                            let _ = self.config.save();
                             let url = info.download_url.clone();
                             let ctx = ui.ctx().clone();
                             std::thread::spawn(move || {

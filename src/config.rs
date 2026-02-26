@@ -79,6 +79,8 @@ pub struct Config {
     pub selected_year: i32,
     pub view_mode: ViewMode,
     pub auto_update: bool,
+    #[serde(default)]
+    pub last_updated_version: Option<String>,
 }
 
 impl Default for Config {
@@ -92,6 +94,7 @@ impl Default for Config {
             selected_year: chrono::Local::now().year(),
             view_mode: ViewMode::Year,
             auto_update: false,
+            last_updated_version: None,
         }
     }
 }
