@@ -33,6 +33,14 @@ cp "$PROJECT_DIR/resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.ic
 
 echo "Built: $APP_DIR"
 
+# Kill running instance before replacing
+pkill -x gitmap 2>/dev/null && echo "Stopped running instance" || true
+
 # Install to /Applications
+rm -rf /Applications/GitMap.app
 cp -R "$APP_DIR" /Applications/GitMap.app
 echo "Installed: /Applications/GitMap.app"
+
+# Launch the app
+open /Applications/GitMap.app
+echo "Launched: GitMap.app"
