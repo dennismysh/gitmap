@@ -499,6 +499,7 @@ impl eframe::App for GitMapApp {
                     } else {
                         // Hide by moving off-screen
                         self.show_settings = false;
+                        let _ = self.config.save();
                         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                             egui::pos2(-10000.0, -10000.0),
                         ));
@@ -518,6 +519,7 @@ impl eframe::App for GitMapApp {
                 self.visible = false;
                 self.show_settings = false;
                 self.focus_lost_at = None;
+                let _ = self.config.save();
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                     egui::pos2(-10000.0, -10000.0),
                 ));
