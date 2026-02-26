@@ -37,6 +37,7 @@ pub struct GitMapApp {
     update_rx: Option<mpsc::Receiver<crate::updater::UpdateInfo>>,
     available_update: Option<crate::updater::UpdateInfo>,
     update_in_progress: bool,
+    last_update_check: std::time::Instant,
 }
 
 impl GitMapApp {
@@ -101,6 +102,7 @@ impl GitMapApp {
             update_rx: Some(update_rx),
             available_update: None,
             update_in_progress: false,
+            last_update_check: std::time::Instant::now(),
         }
     }
 
@@ -496,6 +498,21 @@ impl eframe::App for GitMapApp {
                     self.available_update = Some(info);
                 }
             }
+        }
+
+        // Periodic update check (every 6 hours)
+        if self.available_update.is_none()
+            && !self.update_in_progress
+            && self.last_update_check.elapsed() >= std::time::Duration::from_secs(6 * 60 * 60)
+        {
+            self.last_update_check = std::time::Instant::now();
+            let (tx, rx) = mpsc::channel();
+            self.update_rx = Some(rx);
+            std::thread::spawn(move || {
+                if let Some(info) = crate::updater::check_for_update() {
+                    let _ = tx.send(info);
+                }
+            });
         }
 
         // Track focus loss for click-outside-to-hide
