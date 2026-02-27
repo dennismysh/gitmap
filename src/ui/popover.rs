@@ -670,6 +670,26 @@ impl eframe::App for GitMapApp {
                         }
                     }
 
+                    // Rebuild discovery watcher with current roots
+                    self.discovery_watcher = DiscoveryWatcher::new().ok();
+                    if let Some(ref mut dw) = self.discovery_watcher {
+                        for root in &self.config.auto_discover_roots {
+                            let _ = dw.watch_root(root);
+                        }
+                    }
+
+                    // Re-discover repos from all roots
+                    for root in &self.config.auto_discover_roots {
+                        let discovered = discover_repos(root);
+                        for repo in discovered {
+                            if !self.config.tracked_repos.contains(&repo)
+                                && !self.config.untracked_repos.contains(&repo)
+                            {
+                                self.config.tracked_repos.push(repo);
+                            }
+                        }
+                    }
+
                     // Rescan
                     self.initial_scan();
                 }
