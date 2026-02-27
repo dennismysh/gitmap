@@ -64,3 +64,29 @@ fn test_discovery_watcher_ignores_non_git_dirs() {
         discovered
     );
 }
+
+#[test]
+fn test_discovery_watcher_unwatch_root() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+
+    let mut watcher = DiscoveryWatcher::new().unwrap();
+    watcher.watch_root(&root).unwrap();
+    // Should not panic on unwatch
+    watcher.unwatch_root(&root).unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Create a repo after unwatching — should NOT be detected
+    let repo_path = root.join("post-unwatch");
+    std::fs::create_dir_all(&repo_path).unwrap();
+    Command::new("git").args(["init"]).current_dir(&repo_path).output().unwrap();
+
+    // Drain + debounce
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    watcher.poll_new_repos();
+    std::thread::sleep(std::time::Duration::from_secs(4));
+
+    let discovered = watcher.poll_new_repos();
+    assert!(discovered.is_empty());
+}
