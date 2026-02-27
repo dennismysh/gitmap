@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::discovery::discover_repos;
 use eframe::egui;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,10 +6,8 @@ use std::sync::{Arc, Mutex};
 
 pub struct SettingsState {
     folder_picker_result: Arc<Mutex<Option<Vec<PathBuf>>>>,
-    discover_result: Arc<Mutex<Option<Vec<PathBuf>>>>,
+    discover_root_picker_result: Arc<Mutex<Option<PathBuf>>>,
     pub hex_input: String,
-    /// Repos that were removed this session — available to re-add
-    pub untracked_repos: Vec<PathBuf>,
     pub file_picker_active: Arc<AtomicBool>,
 }
 
@@ -18,9 +15,8 @@ impl SettingsState {
     pub fn new(config: &Config) -> Self {
         Self {
             folder_picker_result: Arc::new(Mutex::new(None)),
-            discover_result: Arc::new(Mutex::new(None)),
+            discover_root_picker_result: Arc::new(Mutex::new(None)),
             hex_input: config.accent_color.clone(),
-            untracked_repos: Vec::new(),
             file_picker_active: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -58,6 +54,70 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
 
         ui.add_space(12.0);
 
+        // --- Watch Directories ---
+        ui.label(egui::RichText::new("Watch Directories").strong().size(14.0));
+        ui.add_space(4.0);
+
+        // Check for discover root picker result
+        if let Ok(mut guard) = state.discover_root_picker_result.try_lock() {
+            if let Some(path) = guard.take() {
+                if !config.auto_discover_roots.contains(&path) {
+                    config.auto_discover_roots.push(path);
+                }
+            }
+        }
+
+        if config.auto_discover_roots.is_empty() {
+            ui.label(
+                egui::RichText::new("No directories watched")
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(100, 100, 100)),
+            );
+        } else {
+            let mut root_to_remove = None;
+            for (i, root) in config.auto_discover_roots.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    let display = root
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| root.display().to_string());
+                    ui.label(
+                        egui::RichText::new(&display)
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(200, 200, 200)),
+                    );
+                    if ui.small_button("\u{2715}").clicked() {
+                        root_to_remove = Some(i);
+                    }
+                })
+                .response
+                .on_hover_text(root.display().to_string());
+            }
+            if let Some(i) = root_to_remove {
+                config.auto_discover_roots.remove(i);
+            }
+        }
+
+        ui.add_space(4.0);
+        if ui.button("Add Watch Directory...").clicked() {
+            let result = Arc::clone(&state.discover_root_picker_result);
+            let ctx = ui.ctx().clone();
+            let picker_flag = Arc::clone(&state.file_picker_active);
+            picker_flag.store(true, Ordering::Relaxed);
+            std::thread::spawn(move || {
+                let folder = rfd::FileDialog::new()
+                    .set_title("Select Directory to Watch for Repos")
+                    .pick_folder();
+                if let Ok(mut guard) = result.lock() {
+                    *guard = folder;
+                }
+                picker_flag.store(false, Ordering::Relaxed);
+                ctx.request_repaint();
+            });
+        }
+
+        ui.add_space(12.0);
+
         // --- Tracked Repos ---
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Tracked Repositories").strong().size(14.0));
@@ -66,8 +126,8 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                     // Move all tracked repos to untracked
                     let all = std::mem::take(&mut config.tracked_repos);
                     for repo in all {
-                        if !state.untracked_repos.contains(&repo) {
-                            state.untracked_repos.push(repo);
+                        if !config.untracked_repos.contains(&repo) {
+                            config.untracked_repos.push(repo);
                         }
                     }
                 }
@@ -79,21 +139,8 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
         if let Ok(mut guard) = state.folder_picker_result.try_lock() {
             if let Some(paths) = guard.take() {
                 for path in paths {
-                    state.untracked_repos.retain(|p| p != &path);
+                    config.untracked_repos.retain(|p| p != &path);
                     if !config.tracked_repos.contains(&path) {
-                        config.tracked_repos.push(path);
-                    }
-                }
-            }
-        }
-
-        // Check for discover results — new repos go to tracked, already-known stay where they are
-        if let Ok(mut guard) = state.discover_result.try_lock() {
-            if let Some(paths) = guard.take() {
-                for path in paths {
-                    if !config.tracked_repos.contains(&path)
-                        && !state.untracked_repos.contains(&path)
-                    {
                         config.tracked_repos.push(path);
                     }
                 }
@@ -122,8 +169,8 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
         }
         if let Some(i) = to_remove {
             let removed = config.tracked_repos.remove(i);
-            if !state.untracked_repos.contains(&removed) {
-                state.untracked_repos.push(removed);
+            if !config.untracked_repos.contains(&removed) {
+                config.untracked_repos.push(removed);
             }
         }
 
@@ -136,53 +183,31 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
         }
 
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            if ui.button("Add Repository...").clicked() {
-                let result = Arc::clone(&state.folder_picker_result);
-                let ctx = ui.ctx().clone();
-                let picker_flag = Arc::clone(&state.file_picker_active);
-                picker_flag.store(true, Ordering::Relaxed);
-                std::thread::spawn(move || {
-                    let folder = rfd::FileDialog::new()
-                        .set_title("Select Git Repository")
-                        .pick_folder();
-                    if let Ok(mut guard) = result.lock() {
-                        *guard = folder.map(|p| vec![p]);
-                    }
-                    picker_flag.store(false, Ordering::Relaxed);
-                    ctx.request_repaint();
-                });
-            }
-
-            if ui.button("Scan Directory...").clicked() {
-                let result = Arc::clone(&state.discover_result);
-                let ctx = ui.ctx().clone();
-                let picker_flag = Arc::clone(&state.file_picker_active);
-                picker_flag.store(true, Ordering::Relaxed);
-                std::thread::spawn(move || {
-                    let folder = rfd::FileDialog::new()
-                        .set_title("Select Parent Directory to Scan")
-                        .pick_folder();
-                    if let Some(root) = folder {
-                        let repos = discover_repos(&root);
-                        if let Ok(mut guard) = result.lock() {
-                            *guard = Some(repos);
-                        }
-                    }
-                    picker_flag.store(false, Ordering::Relaxed);
-                    ctx.request_repaint();
-                });
-            }
-        });
+        if ui.button("Add Repository...").clicked() {
+            let result = Arc::clone(&state.folder_picker_result);
+            let ctx = ui.ctx().clone();
+            let picker_flag = Arc::clone(&state.file_picker_active);
+            picker_flag.store(true, Ordering::Relaxed);
+            std::thread::spawn(move || {
+                let folder = rfd::FileDialog::new()
+                    .set_title("Select Git Repository")
+                    .pick_folder();
+                if let Ok(mut guard) = result.lock() {
+                    *guard = folder.map(|p| vec![p]);
+                }
+                picker_flag.store(false, Ordering::Relaxed);
+                ctx.request_repaint();
+            });
+        }
 
         // --- Untracked Repos (removed repos available to re-add) ---
-        if !state.untracked_repos.is_empty() {
+        if !config.untracked_repos.is_empty() {
             ui.add_space(12.0);
             ui.label(egui::RichText::new("Untracked Repositories").strong().size(14.0));
             ui.add_space(4.0);
 
             let mut to_readd = None;
-            for (i, repo) in state.untracked_repos.iter().enumerate() {
+            for (i, repo) in config.untracked_repos.iter().enumerate() {
                 ui.horizontal(|ui| {
                     let display = repo
                         .file_name()
@@ -201,7 +226,7 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                 .on_hover_text(repo.display().to_string());
             }
             if let Some(i) = to_readd {
-                let repo = state.untracked_repos.remove(i);
+                let repo = config.untracked_repos.remove(i);
                 if !config.tracked_repos.contains(&repo) {
                     config.tracked_repos.push(repo);
                 }
