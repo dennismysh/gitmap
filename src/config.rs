@@ -81,6 +81,8 @@ pub struct Config {
     pub auto_update: bool,
     #[serde(default)]
     pub last_updated_version: Option<String>,
+    #[serde(default)]
+    pub untracked_repos: Vec<PathBuf>,
 }
 
 impl Default for Config {
@@ -95,6 +97,7 @@ impl Default for Config {
             view_mode: ViewMode::Year,
             auto_update: false,
             last_updated_version: None,
+            untracked_repos: Vec::new(),
         }
     }
 }
