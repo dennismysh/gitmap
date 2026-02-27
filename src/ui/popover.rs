@@ -502,10 +502,10 @@ impl eframe::App for GitMapApp {
         if let Some(ref rx) = self.binary_watcher_rx {
             while let Ok(Ok(event)) = rx.try_recv() {
                 if let Some(ref exe) = self.binary_path {
-                    if event.paths.iter().any(|p| p == exe) {
-                        if self.binary_changed_at.is_none() {
-                            self.binary_changed_at = Some(std::time::Instant::now());
-                        }
+                    if event.paths.iter().any(|p| p == exe)
+                        && self.binary_changed_at.is_none()
+                    {
+                        self.binary_changed_at = Some(std::time::Instant::now());
                     }
                 }
             }

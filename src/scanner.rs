@@ -59,7 +59,7 @@ pub fn scan_repo(
         let git_time = commit.time();
         let timestamp = git_time.seconds();
         let offset_minutes = git_time.offset_minutes();
-        let offset = chrono::FixedOffset::east_opt(offset_minutes as i32 * 60)
+        let offset = chrono::FixedOffset::east_opt(offset_minutes * 60)
             .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
         let date = chrono::DateTime::from_timestamp(timestamp, 0)
             .map(|dt| dt.with_timezone(&offset).date_naive())

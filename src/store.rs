@@ -10,6 +10,12 @@ pub struct CommitStore {
     stats: HashMap<NaiveDate, DayStats>,
 }
 
+impl Default for CommitStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommitStore {
     pub fn new() -> Self {
         Self {
