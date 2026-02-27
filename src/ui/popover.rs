@@ -9,6 +9,8 @@ use crate::heatmap::{color_for_level, grid_dates, grid_dates_range, level_for_va
 use crate::scanner::{self, GitIdentity};
 use crate::store::CommitStore;
 use crate::ui::settings::{self, SettingsState};
+use crate::discovery::discover_repos;
+use crate::discovery_watcher::DiscoveryWatcher;
 use crate::watcher::RepoWatcher;
 
 #[derive(Debug)]
@@ -38,10 +40,11 @@ pub struct GitMapApp {
     available_update: Option<crate::updater::UpdateInfo>,
     update_in_progress: bool,
     last_update_check: std::time::Instant,
+    discovery_watcher: Option<DiscoveryWatcher>,
 }
 
 impl GitMapApp {
-    pub fn new(tray_rx: mpsc::Receiver<TrayMessage>, config: Config, store: CommitStore) -> Self {
+    pub fn new(tray_rx: mpsc::Receiver<TrayMessage>, mut config: Config, store: CommitStore) -> Self {
         let identity = config
             .tracked_repos
             .first()
@@ -51,6 +54,26 @@ impl GitMapApp {
         if let Some(ref mut w) = watcher {
             for repo in &config.tracked_repos {
                 let _ = w.watch_repo(repo);
+            }
+        }
+
+        // Startup discovery: scan all discover roots for new repos
+        for root in &config.auto_discover_roots {
+            let discovered = discover_repos(root);
+            for repo in discovered {
+                if !config.tracked_repos.contains(&repo)
+                    && !config.untracked_repos.contains(&repo)
+                {
+                    config.tracked_repos.push(repo);
+                }
+            }
+        }
+
+        // Start watching discover roots
+        let mut discovery_watcher = DiscoveryWatcher::new().ok();
+        if let Some(ref mut dw) = discovery_watcher {
+            for root in &config.auto_discover_roots {
+                let _ = dw.watch_root(root);
             }
         }
 
@@ -103,6 +126,7 @@ impl GitMapApp {
             available_update: None,
             update_in_progress: false,
             last_update_check: std::time::Instant::now(),
+            discovery_watcher,
         }
     }
 
