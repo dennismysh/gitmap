@@ -473,6 +473,31 @@ impl eframe::App for GitMapApp {
             }
         }
 
+        // Poll discovery watcher for new repos
+        if let Some(ref mut dw) = self.discovery_watcher {
+            let new_repos = dw.poll_new_repos();
+            for repo in new_repos {
+                if !self.config.tracked_repos.contains(&repo)
+                    && !self.config.untracked_repos.contains(&repo)
+                {
+                    self.config.tracked_repos.push(repo.clone());
+                    // Start watching the new repo's .git
+                    if let Some(ref mut w) = self.watcher {
+                        let _ = w.watch_repo(&repo);
+                    }
+                    // Scan the new repo
+                    if let Ok(identity) = scanner::detect_identity(&repo) {
+                        if let Ok(stats) = scanner::scan_repo(&repo, &identity, None) {
+                            self.store.merge(stats);
+                        }
+                    }
+                    let _ = self.config.save();
+                    let history_path = crate::config::data_dir().join("history.json");
+                    let _ = self.store.save_to(&history_path);
+                }
+            }
+        }
+
         // Check for binary update (auto-relaunch)
         if let Some(ref rx) = self.binary_watcher_rx {
             while let Ok(Ok(event)) = rx.try_recv() {
