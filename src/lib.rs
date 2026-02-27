@@ -1,5 +1,6 @@
 pub mod config;
 pub mod discovery;
+pub mod discovery_watcher;
 pub mod heatmap;
 pub mod scanner;
 pub mod store;
