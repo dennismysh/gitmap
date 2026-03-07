@@ -40,13 +40,148 @@ jobs:
           cp resources/Info.plist GitMap.app/Contents/Info.plist
           cp resources/AppIcon.icns GitMap.app/Contents/Resources/AppIcon.icns
 
-      - name: Zip .app bundle
+      - name: Import signing certificate
+        env:
+          DEVELOPER_ID_CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERT_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          # Decode certificate
+          echo "$DEVELOPER_ID_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+
+          # Create and configure temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          security import "$CERT_PATH" \
+            -P "$DEVELOPER_ID_CERT_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add temporary keychain to search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Clean up certificate file
+          rm -f "$CERT_PATH"
+
+      - name: Sign .app bundle
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Signing with: $IDENTITY"
+
+          # Sign the inner binary first
+          codesign --force --options runtime \
+            --sign "$IDENTITY" \
+            --entitlements resources/GitMap.entitlements \
+            GitMap.app/Contents/MacOS/gitmap
+
+          # Sign the outer bundle
+          codesign --force --options runtime \
+            --sign "$IDENTITY" \
+            --entitlements resources/GitMap.entitlements \
+            GitMap.app
+
+          # Verify
+          codesign --verify --deep --strict GitMap.app
+          echo "Code signing verified successfully"
+
+      - name: Notarize .app bundle
+        env:
+          NOTARY_KEY_BASE64: ${{ secrets.NOTARY_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          # Decode API key
+          NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
+          echo "$NOTARY_KEY_BASE64" | base64 --decode > "$NOTARY_KEY_PATH"
+
+          # Zip for notarization submission
+          ditto -c -k --keepParent GitMap.app GitMap-notarize.zip
+
+          # Submit and wait
+          xcrun notarytool submit GitMap-notarize.zip \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+
+          # Staple the ticket
+          xcrun stapler staple GitMap.app
+
+          # Clean up
+          rm -f GitMap-notarize.zip
+
+      - name: Create transitional zip (backward compat for v0.3.0 updater)
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           zip -r "GitMap-${TAG}-macos-universal.zip" GitMap.app
 
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          create-dmg \
+            --volname "GitMap" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "GitMap.app" 150 200 \
+            --app-drop-link 450 200 \
+            --background "resources/dmg-background.png" \
+            --no-internet-enable \
+            "GitMap-${TAG}-macos-universal.dmg" \
+            GitMap.app
+
+      - name: Sign and notarize DMG
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          DMG_NAME="GitMap-${TAG}-macos-universal.dmg"
+          NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+          # Sign DMG
+          codesign --force --sign "$IDENTITY" "$DMG_NAME"
+
+          # Notarize DMG
+          xcrun notarytool submit "$DMG_NAME" \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+
+          # Staple DMG
+          xcrun stapler staple "$DMG_NAME"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: GitMap-*.zip
+          files: |
+            GitMap-*.dmg
+            GitMap-*.zip
           generate_release_notes: true
+
+      - name: Cleanup signing artifacts
+        if: always()
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          rm -f "$RUNNER_TEMP/notary-key.p8"
