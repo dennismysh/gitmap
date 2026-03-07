@@ -17,7 +17,7 @@ Built with Rust using egui/eframe for the UI and tray-icon for menu bar integrat
 
 ## Installation
 
-Download the latest `GitMap-vX.X.X-macos-universal.zip` from [Releases](https://github.com/dennismysh/gitmap/releases), unzip, and move `GitMap.app` to `/Applications`.
+Download the latest `GitMap-vX.X.X-macos-universal.dmg` from [Releases](https://github.com/dennismysh/gitmap/releases), open it, and drag `GitMap.app` to the Applications folder.
 
 The app runs as a menu bar icon — click it to open the heatmap popover.
 
@@ -87,7 +87,9 @@ Pushing a version tag triggers a GitHub Actions workflow that:
 1. Cross-compiles for `aarch64-apple-darwin` and `x86_64-apple-darwin`
 2. Creates a universal binary with `lipo`
 3. Packages as `GitMap.app` bundle
-4. Publishes a GitHub Release with the zipped `.app`
+4. Signs with Developer ID certificate and notarizes with Apple
+5. Creates a branded DMG installer
+6. Publishes a GitHub Release with the signed `.dmg`
 
 ```bash
 # To release a new version:
