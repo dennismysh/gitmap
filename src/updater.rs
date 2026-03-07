@@ -32,12 +32,12 @@ pub fn check_for_update() -> Option<UpdateInfo> {
         return None;
     }
 
-    // Find the .zip asset
+    // Find the .dmg asset
     let assets = json["assets"].as_array()?;
     let asset = assets.iter().find(|a| {
         a["name"]
             .as_str()
-            .map(|n| n.ends_with("-macos-universal.zip"))
+            .map(|n| n.ends_with("-macos-universal.dmg"))
             .unwrap_or(false)
     })?;
 
@@ -49,7 +49,7 @@ pub fn check_for_update() -> Option<UpdateInfo> {
     })
 }
 
-/// Download the update zip and replace /Applications/GitMap.app.
+/// Download the update DMG and replace /Applications/GitMap.app.
 pub fn download_and_install(download_url: &str) -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = std::path::Path::new("/tmp/gitmap-update");
 
@@ -59,9 +59,9 @@ pub fn download_and_install(download_url: &str) -> Result<(), Box<dyn std::error
     }
     std::fs::create_dir_all(tmp_dir)?;
 
-    let zip_path = tmp_dir.join("GitMap.zip");
+    let dmg_path = tmp_dir.join("GitMap.dmg");
 
-    // Download the zip
+    // Download the DMG
     let response = ureq::get(download_url)
         .header("User-Agent", "gitmap-updater")
         .call()?;
@@ -69,20 +69,32 @@ pub fn download_and_install(download_url: &str) -> Result<(), Box<dyn std::error
     let mut bytes = Vec::new();
     use std::io::Read;
     response.into_body().into_reader().read_to_end(&mut bytes)?;
-    std::fs::write(&zip_path, &bytes)?;
+    std::fs::write(&dmg_path, &bytes)?;
 
-    // Extract using ditto (macOS built-in, preserves attributes)
-    let status = std::process::Command::new("ditto")
-        .args(["-xk", &zip_path.to_string_lossy(), &tmp_dir.to_string_lossy()])
-        .status()?;
+    // Mount the DMG silently
+    let mount_point = std::path::Path::new("/tmp/gitmap-update/mount");
+    let output = std::process::Command::new("hdiutil")
+        .args([
+            "attach",
+            &dmg_path.to_string_lossy(),
+            "-nobrowse",
+            "-noautoopen",
+            "-mountpoint",
+            &mount_point.to_string_lossy(),
+        ])
+        .output()?;
 
-    if !status.success() {
-        return Err("ditto extraction failed".into());
+    if !output.status.success() {
+        return Err("hdiutil attach failed".into());
     }
 
-    let extracted_app = tmp_dir.join("GitMap.app");
-    if !extracted_app.exists() {
-        return Err("GitMap.app not found in zip".into());
+    let source_app = mount_point.join("GitMap.app");
+
+    if !source_app.exists() {
+        let _ = std::process::Command::new("hdiutil")
+            .args(["detach", &mount_point.to_string_lossy()])
+            .status();
+        return Err("GitMap.app not found in DMG".into());
     }
 
     // Replace the installed app
@@ -91,18 +103,25 @@ pub fn download_and_install(download_url: &str) -> Result<(), Box<dyn std::error
         std::fs::remove_dir_all(installed_app)?;
     }
 
-    let status = std::process::Command::new("mv")
+    let status = std::process::Command::new("cp")
         .args([
-            extracted_app.to_string_lossy().to_string(),
-            "/Applications/GitMap.app".to_string(),
+            "-R",
+            &source_app.to_string_lossy(),
+            "/Applications/GitMap.app",
         ])
         .status()?;
 
     if !status.success() {
-        return Err("failed to move GitMap.app to /Applications".into());
+        let _ = std::process::Command::new("hdiutil")
+            .args(["detach", &mount_point.to_string_lossy()])
+            .status();
+        return Err("failed to copy GitMap.app to /Applications".into());
     }
 
-    // Clean up temp dir
+    // Unmount and clean up
+    let _ = std::process::Command::new("hdiutil")
+        .args(["detach", &mount_point.to_string_lossy()])
+        .status();
     let _ = std::fs::remove_dir_all(tmp_dir);
 
     Ok(())
