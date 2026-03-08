@@ -4,11 +4,20 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+pub enum UpdateCheckStatus {
+    Checking,
+    UpToDate,
+    Available(String),
+    Error,
+}
+
 pub struct SettingsState {
     folder_picker_result: Arc<Mutex<Option<Vec<PathBuf>>>>,
     discover_root_picker_result: Arc<Mutex<Option<PathBuf>>>,
     pub hex_input: String,
     pub file_picker_active: Arc<AtomicBool>,
+    update_check_result: Arc<Mutex<Option<UpdateCheckStatus>>>,
+    pub update_check_status: Option<UpdateCheckStatus>,
 }
 
 impl SettingsState {
@@ -18,6 +27,8 @@ impl SettingsState {
             discover_root_picker_result: Arc::new(Mutex::new(None)),
             hex_input: config.accent_color.clone(),
             file_picker_active: Arc::new(AtomicBool::new(false)),
+            update_check_result: Arc::new(Mutex::new(None)),
+            update_check_status: None,
         }
     }
 }
@@ -324,6 +335,66 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
 
         ui.add_space(4.0);
         ui.checkbox(&mut config.auto_update, "Auto-update (silent)");
+
+        // Poll for update check result from background thread
+        if let Ok(mut guard) = state.update_check_result.try_lock() {
+            if let Some(status) = guard.take() {
+                state.update_check_status = Some(status);
+            }
+        }
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let checking = matches!(state.update_check_status, Some(UpdateCheckStatus::Checking));
+            let button = egui::Button::new("Check for Updates");
+            if ui.add_enabled(!checking, button).clicked() {
+                state.update_check_status = Some(UpdateCheckStatus::Checking);
+                let result = Arc::clone(&state.update_check_result);
+                let ctx = ui.ctx().clone();
+                std::thread::spawn(move || {
+                    let status = match crate::updater::check_for_update() {
+                        Some(info) => UpdateCheckStatus::Available(info.version),
+                        None => UpdateCheckStatus::UpToDate,
+                    };
+                    if let Ok(mut guard) = result.lock() {
+                        *guard = Some(status);
+                    }
+                    ctx.request_repaint();
+                });
+            }
+
+            match &state.update_check_status {
+                Some(UpdateCheckStatus::Checking) => {
+                    ui.label(
+                        egui::RichText::new("Checking...")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(139, 148, 158)),
+                    );
+                }
+                Some(UpdateCheckStatus::UpToDate) => {
+                    ui.label(
+                        egui::RichText::new("Up to date")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(63, 185, 80)),
+                    );
+                }
+                Some(UpdateCheckStatus::Available(version)) => {
+                    ui.label(
+                        egui::RichText::new(format!("v{} available", version))
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(88, 166, 255)),
+                    );
+                }
+                Some(UpdateCheckStatus::Error) => {
+                    ui.label(
+                        egui::RichText::new("Check failed")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(248, 81, 73)),
+                    );
+                }
+                None => {}
+            }
+        });
     });
 }
 
