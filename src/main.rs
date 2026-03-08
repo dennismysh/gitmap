@@ -14,12 +14,8 @@ fn main() -> eframe::Result<()> {
 
     let (tray_tx, tray_rx) = mpsc::channel::<TrayMessage>();
 
-    let mut icon_rgba = Vec::with_capacity(22 * 22 * 4);
-    for _ in 0..(22 * 22) {
-        icon_rgba.extend_from_slice(&[0, 0, 0, 255]);
-    }
-    let icon =
-        tray_icon::Icon::from_rgba(icon_rgba, 22, 22).expect("Failed to create tray icon");
+    let (icon, icon_as_template) =
+        gitmap::icons::tray_icon_for_config(config.icon_color, config.colored_tray_icon);
 
     let menu = tray_icon::menu::Menu::new();
     let quit_item = tray_icon::menu::MenuItem::new("Quit", true, None);
@@ -73,7 +69,7 @@ fn main() -> eframe::Result<()> {
         Box::new(move |_cc| {
             let tray = tray_icon::TrayIconBuilder::new()
                 .with_icon(icon)
-                .with_icon_as_template(true)
+                .with_icon_as_template(icon_as_template)
                 .with_tooltip("GitMap")
                 .with_menu(Box::new(menu))
                 .with_menu_on_left_click(false)
