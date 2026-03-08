@@ -718,6 +718,19 @@ impl eframe::App for GitMapApp {
                 }
                 ui.add_space(8.0);
                 settings::draw_settings(ui, &mut self.config, &mut self.settings_state);
+
+                if self.settings_state.icon_changed {
+                    self.settings_state.icon_changed = false;
+                    if let Some(ref tray) = self.tray_icon {
+                        let (icon, as_template) = crate::icons::tray_icon_for_config(
+                            self.config.icon_color,
+                            self.config.colored_tray_icon,
+                        );
+                        let _ = tray.set_icon(Some(icon));
+                        let _ = tray.set_icon_as_template(as_template);
+                    }
+                    crate::icons::set_finder_icon(self.config.icon_color);
+                }
             } else {
                 self.draw_header(ui);
                 ui.add_space(12.0);

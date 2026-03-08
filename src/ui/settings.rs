@@ -18,6 +18,7 @@ pub struct SettingsState {
     pub file_picker_active: Arc<AtomicBool>,
     update_check_result: Arc<Mutex<Option<UpdateCheckStatus>>>,
     pub update_check_status: Option<UpdateCheckStatus>,
+    pub icon_changed: bool,
 }
 
 impl SettingsState {
@@ -29,6 +30,7 @@ impl SettingsState {
             file_picker_active: Arc::new(AtomicBool::new(false)),
             update_check_result: Arc::new(Mutex::new(None)),
             update_check_status: None,
+            icon_changed: false,
         }
     }
 }
@@ -242,6 +244,45 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                     config.tracked_repos.push(repo);
                 }
             }
+        }
+
+        ui.add_space(12.0);
+
+        // --- Logo Color ---
+        ui.label(egui::RichText::new("Logo Color").strong().size(14.0));
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            for color in crate::config::IconColor::all() {
+                let [r, g, b] = color.swatch_rgb();
+                let selected = config.icon_color == *color;
+                let size = if selected { 24.0 } else { 20.0 };
+                let (rect, response) =
+                    ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
+                ui.painter().rect_filled(
+                    rect,
+                    egui::CornerRadius::same(4),
+                    egui::Color32::from_rgb(r, g, b),
+                );
+                if selected {
+                    ui.painter().rect_stroke(
+                        rect,
+                        egui::CornerRadius::same(4),
+                        egui::Stroke::new(2.0, egui::Color32::WHITE),
+                        egui::StrokeKind::Outside,
+                    );
+                }
+                if response.clicked() {
+                    config.icon_color = *color;
+                    state.icon_changed = true;
+                }
+                response.on_hover_text(color.label());
+            }
+        });
+
+        ui.add_space(4.0);
+        if ui.checkbox(&mut config.colored_tray_icon, "Use colored tray icon").changed() {
+            state.icon_changed = true;
         }
 
         ui.add_space(12.0);
