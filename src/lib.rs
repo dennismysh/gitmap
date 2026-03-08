@@ -1,4 +1,5 @@
 pub mod config;
+pub mod icons;
 pub mod discovery;
 pub mod discovery_watcher;
 pub mod heatmap;
