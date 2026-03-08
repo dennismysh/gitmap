@@ -20,7 +20,7 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Build aarch64
-        run: cargo build --release --target aarch64-apple-darwin
+        run: cargo build --release --target aarch64-apple-darwin --features vendored-openssl
 
       - name: Build x86_64
         run: cargo build --release --target x86_64-apple-darwin --features vendored-openssl

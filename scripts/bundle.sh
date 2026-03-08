@@ -15,7 +15,7 @@ case "$ARCH" in
 esac
 
 echo "Building for $TARGET..."
-cargo build --release --target "$TARGET" --manifest-path "$PROJECT_DIR/Cargo.toml"
+cargo build --release --target "$TARGET" --features vendored-openssl --manifest-path "$PROJECT_DIR/Cargo.toml"
 
 # Clean previous bundle
 rm -rf "$APP_DIR"
