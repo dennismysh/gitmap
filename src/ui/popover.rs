@@ -524,7 +524,8 @@ impl eframe::App for GitMapApp {
         }
 
         // Debounced relaunch after binary change (500ms for copy to finish)
-        if let Some(changed_at) = self.binary_changed_at {
+        // Skip if an auto-update is in progress — it handles its own relaunch
+        if let Some(changed_at) = self.binary_changed_at.filter(|_| !self.update_in_progress) {
             if changed_at.elapsed() >= std::time::Duration::from_millis(500) {
                 let _ = self.config.save();
                 let history_path = crate::config::data_dir().join("history.json");
