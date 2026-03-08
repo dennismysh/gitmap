@@ -17,6 +17,7 @@ use crate::watcher::RepoWatcher;
 pub enum TrayMessage {
     ToggleWindow { icon_rect: tray_icon::Rect },
     Quit,
+    UpdateIcon,
 }
 
 pub struct GitMapApp {
@@ -41,6 +42,7 @@ pub struct GitMapApp {
     update_in_progress: bool,
     last_update_check: std::time::Instant,
     discovery_watcher: Option<DiscoveryWatcher>,
+    tray_icon: Option<tray_icon::TrayIcon>,
 }
 
 impl GitMapApp {
@@ -127,7 +129,12 @@ impl GitMapApp {
             update_in_progress: false,
             last_update_check: std::time::Instant::now(),
             discovery_watcher,
+            tray_icon: None,
         }
+    }
+
+    pub fn set_tray_icon(&mut self, tray: tray_icon::TrayIcon) {
+        self.tray_icon = Some(tray);
     }
 
     pub fn initial_scan(&mut self) {
@@ -151,6 +158,11 @@ impl GitMapApp {
             .and_then(|p| scanner::detect_identity(p).ok());
         let history_path = crate::config::data_dir().join("history.json");
         let _ = self.store.save_to(&history_path);
+
+        // Re-apply Finder icon if not default (handles auto-update resetting resource fork)
+        if self.config.icon_color != crate::config::IconColor::Green {
+            crate::icons::set_finder_icon(self.config.icon_color);
+        }
     }
 
     fn draw_header(&mut self, ui: &mut egui::Ui) {
@@ -620,6 +632,17 @@ impl eframe::App for GitMapApp {
                 }
                 TrayMessage::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                TrayMessage::UpdateIcon => {
+                    if let Some(ref tray) = self.tray_icon {
+                        let (icon, as_template) = crate::icons::tray_icon_for_config(
+                            self.config.icon_color,
+                            self.config.colored_tray_icon,
+                        );
+                        let _ = tray.set_icon(Some(icon));
+                        let _ = tray.set_icon_as_template(as_template);
+                    }
+                    crate::icons::set_finder_icon(self.config.icon_color);
                 }
             }
         }

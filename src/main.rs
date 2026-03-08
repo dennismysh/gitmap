@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::mpsc;
 
 use gitmap::config::Config;
@@ -60,9 +58,6 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
-    let tray_holder: Rc<RefCell<Option<tray_icon::TrayIcon>>> = Rc::new(RefCell::new(None));
-    let tray_holder_clone = tray_holder.clone();
-
     eframe::run_native(
         "GitMap",
         options,
@@ -75,9 +70,9 @@ fn main() -> eframe::Result<()> {
                 .with_menu_on_left_click(false)
                 .build()
                 .unwrap();
-            tray_holder_clone.borrow_mut().replace(tray);
 
             let mut app = GitMapApp::new(tray_rx, config, store);
+            app.set_tray_icon(tray);
             app.initial_scan();
             Ok(Box::new(app))
         }),
