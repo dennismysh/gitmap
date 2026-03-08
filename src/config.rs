@@ -68,6 +68,62 @@ impl DataMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IconColor {
+    Green,
+    Blue,
+    Purple,
+    Orange,
+    Pink,
+    Bumblebee,
+    Lemon,
+}
+
+impl Default for IconColor {
+    fn default() -> Self {
+        IconColor::Green
+    }
+}
+
+impl IconColor {
+    pub fn label(&self) -> &'static str {
+        match self {
+            IconColor::Green => "Green",
+            IconColor::Blue => "Blue",
+            IconColor::Purple => "Purple",
+            IconColor::Orange => "Orange",
+            IconColor::Pink => "Pink",
+            IconColor::Bumblebee => "Bumblebee",
+            IconColor::Lemon => "Lemon",
+        }
+    }
+
+    pub fn all() -> &'static [IconColor] {
+        &[
+            IconColor::Green,
+            IconColor::Blue,
+            IconColor::Purple,
+            IconColor::Orange,
+            IconColor::Pink,
+            IconColor::Bumblebee,
+            IconColor::Lemon,
+        ]
+    }
+
+    /// Representative RGB color for the settings UI swatch
+    pub fn swatch_rgb(&self) -> [u8; 3] {
+        match self {
+            IconColor::Green => [57, 211, 83],
+            IconColor::Blue => [88, 166, 255],
+            IconColor::Purple => [124, 58, 237],
+            IconColor::Orange => [249, 115, 22],
+            IconColor::Pink => [236, 72, 153],
+            IconColor::Bumblebee => [245, 158, 11],
+            IconColor::Lemon => [234, 212, 30],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -83,6 +139,10 @@ pub struct Config {
     pub last_updated_version: Option<String>,
     #[serde(default)]
     pub untracked_repos: Vec<PathBuf>,
+    #[serde(default)]
+    pub icon_color: IconColor,
+    #[serde(default)]
+    pub colored_tray_icon: bool,
 }
 
 impl Default for Config {
@@ -98,6 +158,8 @@ impl Default for Config {
             auto_update: false,
             last_updated_version: None,
             untracked_repos: Vec::new(),
+            icon_color: IconColor::default(),
+            colored_tray_icon: false,
         }
     }
 }
