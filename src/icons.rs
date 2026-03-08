@@ -49,3 +49,51 @@ pub fn tray_icon_for_config(
         (build_tray_icon(TRANSPARENT_PNG), true)
     }
 }
+
+/// Set the Finder icon for the .app bundle using NSWorkspace.
+/// This uses resource fork metadata and does NOT modify the signed bundle.
+#[cfg(target_os = "macos")]
+pub fn set_finder_icon(icon_color: IconColor) {
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSImage, NSWorkspace, NSWorkspaceIconCreationOptions};
+    use objc2_foundation::{NSData, NSString};
+
+    let app_path = match find_app_bundle_path() {
+        Some(p) => p,
+        None => return, // Not running from a .app bundle (e.g., cargo run)
+    };
+
+    let png_bytes = icon_color.png_bytes();
+    let data = NSData::with_bytes(png_bytes);
+    let image = match NSImage::initWithData(NSImage::alloc(), &data) {
+        Some(img) => img,
+        None => return,
+    };
+
+    let path_str = NSString::from_str(&app_path);
+    let workspace = NSWorkspace::sharedWorkspace();
+    let _ = workspace.setIcon_forFile_options(
+        Some(&image),
+        &path_str,
+        NSWorkspaceIconCreationOptions(0),
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_finder_icon(_icon_color: IconColor) {}
+
+/// Walk up from the current executable to find the .app bundle path.
+fn find_app_bundle_path() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let exe = exe.canonicalize().unwrap_or(exe);
+    let mut current = exe.as_path();
+    while let Some(parent) = current.parent() {
+        if let Some(name) = current.file_name() {
+            if name.to_string_lossy().ends_with(".app") {
+                return Some(current.to_string_lossy().to_string());
+            }
+        }
+        current = parent;
+    }
+    None
+}
