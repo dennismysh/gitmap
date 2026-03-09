@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 pub enum UpdateCheckStatus {
     Checking,
     UpToDate,
-    Available(String),
+    Available { version: String, download_url: String },
     Error,
 }
 
@@ -19,6 +19,7 @@ pub struct SettingsState {
     update_check_result: Arc<Mutex<Option<UpdateCheckStatus>>>,
     pub update_check_status: Option<UpdateCheckStatus>,
     pub icon_changed: bool,
+    pub update_triggered: Option<String>,
 }
 
 impl SettingsState {
@@ -31,6 +32,7 @@ impl SettingsState {
             update_check_result: Arc::new(Mutex::new(None)),
             update_check_status: None,
             icon_changed: false,
+            update_triggered: None,
         }
     }
 }
@@ -394,7 +396,10 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                 let ctx = ui.ctx().clone();
                 std::thread::spawn(move || {
                     let status = match crate::updater::check_for_update() {
-                        Some(info) => UpdateCheckStatus::Available(info.version),
+                        Some(info) => UpdateCheckStatus::Available {
+                            version: info.version,
+                            download_url: info.download_url,
+                        },
                         None => UpdateCheckStatus::UpToDate,
                     };
                     if let Ok(mut guard) = result.lock() {
@@ -419,12 +424,15 @@ pub fn draw_settings(ui: &mut egui::Ui, config: &mut Config, state: &mut Setting
                             .color(egui::Color32::from_rgb(63, 185, 80)),
                     );
                 }
-                Some(UpdateCheckStatus::Available(version)) => {
+                Some(UpdateCheckStatus::Available { version, download_url }) => {
                     ui.label(
                         egui::RichText::new(format!("v{} available", version))
                             .size(12.0)
                             .color(egui::Color32::from_rgb(88, 166, 255)),
                     );
+                    if ui.small_button("Update").clicked() {
+                        state.update_triggered = Some(download_url.clone());
+                    }
                 }
                 Some(UpdateCheckStatus::Error) => {
                     ui.label(
