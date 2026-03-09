@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/gitmap-green.png" width="160" alt="GitMap logo">
+</p>
+
 # GitMap
 
 A macOS menu bar app that displays a GitHub-style commit heatmap for your local git repositories.
@@ -10,8 +14,9 @@ Built with Rust using egui/eframe for the UI and tray-icon for menu bar integrat
 - **Two view modes** — Year view (full calendar year) or Rolling view (1 week to 12 months)
 - **Two data modes** — Track commits or lines changed (insertions + deletions)
 - **Multi-repo tracking** — Add individual repos or scan a directory to discover all git repos
+- **Watch directories** — Auto-discover new repos in watched folders
 - **Real-time updates** — Watches `.git` directories for changes and rescans automatically
-- **Customizable colors** — 5 preset accent colors plus custom hex input
+- **Customizable colors** — 5 heatmap accent presets, custom hex, and 7 icon color themes
 - **Auto-update** — Checks GitHub Releases for new versions, with optional silent auto-update
 - **Universal binary** — Runs natively on both Apple Silicon and Intel Macs
 
@@ -44,6 +49,7 @@ Menu Bar (tray-icon)
 Background:
   ├─ Git Scanner (git2) — reads commit history, filters by user identity
   ├─ Repo Watcher (notify) — FSEvents on .git dirs for real-time updates
+  ├─ Discovery Watcher (notify) — detects new repos in watched directories
   ├─ Updater (ureq) — checks GitHub Releases API for new versions
   └─ Binary Watcher (notify) — detects binary updates for auto-relaunch
 ```
@@ -56,8 +62,10 @@ Background:
 | `store` | In-memory `HashMap<NaiveDate, DayStats>` with JSON persistence |
 | `heatmap` | Generates the date grid and maps values to color intensity levels |
 | `watcher` | Watches `.git` directories via FSEvents for real-time commit detection |
-| `updater` | Checks GitHub Releases API for updates, downloads and replaces the .app bundle |
 | `discovery` | Recursively finds git repos under a given directory |
+| `discovery_watcher` | Watches parent directories via FSEvents to auto-discover new repos |
+| `icons` | Embeds icon PNGs, handles decode/resize for tray and Finder icons |
+| `updater` | Checks GitHub Releases API for updates, downloads and replaces the .app bundle |
 | `config` | Persists settings (tracked repos, colors, view mode, auto-update) as JSON |
 | `ui` | Popover window with heatmap rendering, settings panel, and update banner |
 
