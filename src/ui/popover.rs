@@ -460,6 +460,8 @@ impl eframe::App for GitMapApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.set_visuals(egui::Visuals::dark());
+
         // Poll file watcher for changed repos
         let changed_repos = self
             .watcher
